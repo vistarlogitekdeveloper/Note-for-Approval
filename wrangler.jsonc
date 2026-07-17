@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "note-approval",
+  "compatibility_date": "2026-07-17",
+
+  // Assets-only Worker: no `main` script, Cloudflare just serves build/web
+  // from its edge. Cache headers live in web/_headers (copied into the build).
+  "assets": {
+    "directory": "./build/web",
+    // go_router uses usePathUrlStrategy(), so deep links like /notes/123 are
+    // real paths with no file behind them. Serve index.html for those instead
+    // of a 404 and let the router resolve them client-side.
+    "not_found_handling": "single-page-application"
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "note-approval",
+  "private": true,
+  "description": "Cloudflare deploy tooling for the Vistar Note for Approval portal. The app itself is Flutter; see build.sh.",
+  "scripts": {
+    "build": "bash build.sh",
+    "deploy": "bash build.sh && wrangler deploy",
+    "preview": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "^4.112.0"
+  }
+}

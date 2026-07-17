@@ -1,0 +1,17 @@
+# Cache policy for the deployed app.
+#
+# Flutter web does not content-hash its output: every build emits the same
+# main.dart.js / flutter_bootstrap.js / index.html names. A normal max-age
+# would therefore serve a stale app after a deploy until the TTL expired.
+#
+# "no-cache" does NOT mean "do not store" - the browser still keeps the file
+# but must revalidate it against the edge before reusing it. Cloudflare answers
+# with a 304 (a few hundred bytes) when nothing changed, so repeat loads stay
+# fast, and a deploy is picked up on the very next request. No manual cache
+# clearing, ever.
+
+/*
+  Cache-Control: no-cache
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin

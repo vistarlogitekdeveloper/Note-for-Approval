@@ -1,0 +1,5 @@
+# pubspec.yaml declares assets/images/ as an asset directory, and Flutter fails
+# the build if a declared directory is missing. The folder is currently empty,
+# and git does not track empty directories, so without this file the directory
+# would not survive a clone and CI builds would break. Safe to delete once real
+# images live here.
