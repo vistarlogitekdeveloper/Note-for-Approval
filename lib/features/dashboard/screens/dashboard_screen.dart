@@ -135,47 +135,69 @@ class DashboardScreen extends ConsumerWidget {
 /// fits as many columns as it can at up to 320px each, so it stays responsive
 /// without any width thresholds to keep in sync.
 const kpiGridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
-  maxCrossAxisExtent: 320,
-  crossAxisSpacing: 16,
-  mainAxisSpacing: 16,
-  mainAxisExtent: 168,
+  maxCrossAxisExtent: 230,
+  crossAxisSpacing: 12,
+  mainAxisSpacing: 12,
+  mainAxisExtent: 124,
 );
 
-class _KpiGrid extends StatelessWidget {
+class _KpiGrid extends ConsumerWidget {
   const _KpiGrid({required this.stats, required this.user});
   final DashboardStats stats;
   final User? user;
 
+  /// Opens My Notes already filtered to the slice this card counts, so the
+  /// number and the list the user lands on always agree.
+  void _open(BuildContext context, WidgetRef ref, String? status) {
+    ref.read(notesFilterProvider.notifier).state = status;
+    context.go('/notes');
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return GridView(
       gridDelegate: kpiGridDelegate,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       children: [
-          KpiCard(
-            label: 'Total Notes',
-            value: '${stats.totalNotes}',
-            icon: Icons.description_outlined,
-            color: AppColors.info,
-          ),
-          KpiCard(
-            label: 'Pending',
-            value: '${stats.pendingNotes}',
-            icon: Icons.pending_actions_outlined,
-            color: AppColors.warn,
-          ),
-          KpiCard(
-            label: 'Approved',
-            value: '${stats.approvedNotes}',
-            icon: Icons.check_circle_outline_rounded,
-            color: AppColors.ok,
-          ),
+        KpiCard(
+          label: 'Total Notes',
+          value: '${stats.totalNotes}',
+          icon: Icons.description_outlined,
+          color: AppColors.info,
+          onTap: () => _open(context, ref, null),
+        ),
+        // Drafts were missing, which made the totals look wrong: the API counts
+        // drafts in `total`, so with any draft present Total was larger than
+        // the cards beneath it and there was nothing to account for the gap.
+        KpiCard(
+          label: 'Drafts',
+          value: '${stats.draftNotes}',
+          icon: Icons.edit_note_rounded,
+          color: AppColors.txt3,
+          onTap: () => _open(context, ref, NoteStatus.draft.wireValue),
+        ),
+        KpiCard(
+          label: 'Pending',
+          value: '${stats.pendingNotes}',
+          icon: Icons.pending_actions_outlined,
+          color: AppColors.warn,
+          onTap: () =>
+              _open(context, ref, NoteStatus.pendingApproval.wireValue),
+        ),
+        KpiCard(
+          label: 'Approved',
+          value: '${stats.approvedNotes}',
+          icon: Icons.check_circle_outline_rounded,
+          color: AppColors.ok,
+          onTap: () => _open(context, ref, NoteStatus.approved.wireValue),
+        ),
         KpiCard(
           label: 'Rejected',
           value: '${stats.rejectedNotes}',
           icon: Icons.cancel_outlined,
           color: AppColors.bad,
+          onTap: () => _open(context, ref, NoteStatus.rejected.wireValue),
         ),
       ],
     );
@@ -193,7 +215,7 @@ class _KpiGridShimmer extends StatelessWidget {
       gridDelegate: kpiGridDelegate,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      children: List.generate(4, (_) => const ShimmerCard(height: 168)),
+      children: List.generate(5, (_) => const ShimmerCard(height: 124)),
     );
   }
 }

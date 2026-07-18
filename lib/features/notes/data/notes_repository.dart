@@ -108,6 +108,19 @@ class NotesRepository {
     return _notes(res);
   }
 
+  /// This user's own approve/reject history, newest first, with lifetime
+  /// tallies in the meta.
+  Future<MyDecisionPage> getMyDecisions({String? action}) async {
+    final res = await _api.get(ApiEndpoints.myDecisions, params: {
+      'action': action,
+      'limit': _listLimit,
+    });
+    return MyDecisionPage.fromResult(
+      res.asList.map(MyDecision.fromJson).toList(),
+      res.meta,
+    );
+  }
+
   Future<List<Note>> getPendingApprovals() async {
     final res = await _api.get(
       ApiEndpoints.pendingApprovals,

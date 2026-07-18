@@ -19,6 +19,15 @@ final myNotesProvider = FutureProvider.autoDispose<List<Note>>((ref) async {
   return ref.read(notesRepositoryProvider).getMyNotes();
 });
 
+// ── My own decision history ──────────────────────────────────────────────────
+final myDecisionsFilterProvider = StateProvider<String?>((ref) => null);
+
+final myDecisionsProvider =
+    FutureProvider.autoDispose<MyDecisionPage>((ref) async {
+  final action = ref.watch(myDecisionsFilterProvider);
+  return ref.read(notesRepositoryProvider).getMyDecisions(action: action);
+});
+
 // ── Pending approvals (for approvers) ────────────────────────────────────────
 final pendingApprovalsProvider =
     FutureProvider.autoDispose<List<Note>>((ref) async {

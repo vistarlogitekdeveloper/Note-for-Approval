@@ -137,6 +137,96 @@ class ApprovalAction {
   }
 }
 
+/// One decision this user made, with just enough of the note attached to
+/// identify it. Comes from `GET /approvals/my-decisions`.
+///
+/// Distinct from a status count: this is a record of an ACT. A note you
+/// rejected that was later revised and approved still appears here as your
+/// rejection, which is the whole point — it is your history, not the note's
+/// current state.
+class MyDecision {
+  const MyDecision({
+    required this.id,
+    required this.level,
+    required this.revision,
+    required this.roleName,
+    required this.action,
+    required this.remark,
+    required this.noteId,
+    required this.noteNumber,
+    required this.noteObjective,
+    required this.noteStatus,
+    this.actedAt,
+  });
+
+  final String id;
+  final int level;
+  final int revision;
+  final String roleName;
+  final String action; // 'approved' | 'rejected'
+  final String remark;
+  final DateTime? actedAt;
+
+  final String noteId;
+  final String noteNumber;
+  final String noteObjective;
+
+  /// Where the note stands NOW, which may differ from what this decision was.
+  final NoteStatus noteStatus;
+
+  bool get isApproved => action == 'approved';
+
+  /// True when the note moved on after this decision — you rejected it and it
+  /// was revised, or you approved it and a later level rejected it.
+  bool get outcomeDiffers =>
+      (isApproved && noteStatus == NoteStatus.rejected) ||
+      (!isApproved && noteStatus != NoteStatus.rejected);
+
+  factory MyDecision.fromJson(Map<String, dynamic> j) {
+    final note = (j['note'] as Map?)?.cast<String, dynamic>() ?? const {};
+    return MyDecision(
+      id: j['id'] as String,
+      level: (j['level'] as num?)?.toInt() ?? 0,
+      revision: (j['revision'] as num?)?.toInt() ?? 1,
+      roleName: j['role_name'] as String? ?? '',
+      action: j['action'] as String? ?? '',
+      remark: j['remark'] as String? ?? '',
+      actedAt: DateTime.tryParse(j['acted_at'] as String? ?? ''),
+      noteId: note['id'] as String? ?? '',
+      noteNumber: note['note_number'] as String? ?? '—',
+      noteObjective: note['objective_in_detail'] as String? ?? '',
+      noteStatus: NoteStatus.fromString(note['status'] as String? ?? 'draft'),
+    );
+  }
+}
+
+/// A page of decisions plus the lifetime tallies. The tallies cover the whole
+/// history, not the page, so they do not shift as you scroll.
+class MyDecisionPage {
+  const MyDecisionPage({
+    required this.decisions,
+    required this.approved,
+    required this.rejected,
+    required this.total,
+  });
+
+  final List<MyDecision> decisions;
+  final int approved;
+  final int rejected;
+  final int total;
+
+  factory MyDecisionPage.fromResult(
+    List<MyDecision> decisions,
+    Map<String, dynamic>? meta,
+  ) =>
+      MyDecisionPage(
+        decisions: decisions,
+        approved: (meta?['approved'] as num?)?.toInt() ?? 0,
+        rejected: (meta?['rejected'] as num?)?.toInt() ?? 0,
+        total: (meta?['total'] as num?)?.toInt() ?? decisions.length,
+      );
+}
+
 class Note {
   final String id;
   final String noteNumber;

@@ -121,8 +121,13 @@ class _AppShellState extends ConsumerState<AppShell> {
                   _navGroup('Main', [
                     _NavItem(icon: Icons.dashboard_outlined, label: 'Dashboard', path: '/dashboard', collapsed: collapsed),
                     _NavItem(icon: Icons.description_outlined, label: 'My Notes', path: '/notes', collapsed: collapsed),
-                    if (role?.canApprove ?? false)
-                      _NavItem(icon: Icons.pending_actions_outlined, label: 'Pending Approvals', path: '/approvals', collapsed: collapsed),
+                    if (role?.canApprove ?? false) ...[
+                      _NavItem(icon: Icons.pending_actions_outlined, label: 'Pending Approvals', path: '/approvals', collapsed: collapsed, exact: true),
+                      // An approver who raises no notes of their own has no
+                      // other record of their work: My Notes is initiator-only
+                      // and the audit log is admin-only.
+                      _NavItem(icon: Icons.history_rounded, label: 'My Decisions', path: '/approvals/mine', collapsed: collapsed),
+                    ],
                   ], collapsed: collapsed),
                   if (role?.canAdmin ?? false) ...[
                     _navGroup('Administration', [
@@ -210,6 +215,7 @@ class _NavItem extends ConsumerWidget {
     required this.label,
     required this.path,
     required this.collapsed,
+    this.exact = false,
   });
 
   final IconData icon;
@@ -217,10 +223,19 @@ class _NavItem extends ConsumerWidget {
   final String path;
   final bool collapsed;
 
+  /// Set when another nav item lives under this one's path, so this item stays
+  /// unlit while that child is open.
+  final bool exact;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final location = GoRouterState.of(context).matchedLocation;
-    final isActive = location == path || location.startsWith('$path/');
+    // Prefix matching keeps a parent lit while you are in its detail views
+    // (/notes/:id still belongs to My Notes). It must be opt-out, though: when
+    // a nav item sits UNDER another one — /approvals/mine under /approvals —
+    // prefix matching would light both at once.
+    final isActive =
+        location == path || (!exact && location.startsWith('$path/'));
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

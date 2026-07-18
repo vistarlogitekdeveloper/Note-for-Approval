@@ -9,6 +9,7 @@ import '../../features/notes/screens/my_notes_screen.dart';
 import '../../features/notes/screens/create_note_screen.dart';
 import '../../features/notes/screens/note_detail_screen.dart';
 import '../../features/approvals/screens/pending_approvals_screen.dart';
+import '../../features/approvals/screens/my_decisions_screen.dart';
 import '../../features/admin/screens/admin_screen.dart';
 import '../../features/admin/screens/users_screen.dart';
 import '../../features/admin/screens/masters_screen.dart';
@@ -114,6 +115,15 @@ final routerProvider = Provider<GoRouter>((ref) {
               key: state.pageKey,
               child: const PendingApprovalsScreen(),
             ),
+            routes: [
+              GoRoute(
+                path: 'mine',
+                pageBuilder: (context, state) => NoTransitionPage(
+                  key: state.pageKey,
+                  child: const MyDecisionsScreen(),
+                ),
+              ),
+            ],
           ),
           GoRoute(
             path: '/admin',

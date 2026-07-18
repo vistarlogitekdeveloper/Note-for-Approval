@@ -76,6 +76,7 @@ class KpiCard extends StatelessWidget {
     required this.value,
     required this.icon,
     required this.color,
+    this.onTap,
   });
 
   final String label;
@@ -83,35 +84,51 @@ class KpiCard extends StatelessWidget {
   final IconData icon;
   final Color color;
 
+  /// Every KPI stands for a filtered slice of the notes list, so tapping one
+  /// takes you to exactly that slice rather than leaving you to re-derive it
+  /// by hand.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
     return VistarCard(
+      onTap: onTap,
+      padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Container(
-                width: 38,
-                height: 38,
+                width: 32,
+                height: 32,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(11),
+                  borderRadius: BorderRadius.circular(9),
                 ),
-                child: Icon(icon, color: color, size: 20),
+                child: Icon(icon, color: color, size: 17),
               ),
               const Spacer(),
-              Container(
-                width: 120,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(6),
+              // Flexible, not a fixed 120: on a narrow tile a rigid bar was
+              // the thing that pushed the row over its width.
+              Flexible(
+                child: Container(
+                  height: 5,
+                  constraints: const BoxConstraints(maxWidth: 84),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
                 ),
               ),
+              if (onTap != null) ...[
+                const SizedBox(width: 6),
+                Icon(Icons.chevron_right_rounded,
+                    size: 15, color: AppColors.txt3.withValues(alpha: 0.7)),
+              ],
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           // Flexible + scaleDown so a cramped tile shrinks the number instead
           // of overflowing. The grid gives these cards a fixed height, but
           // font metrics vary by platform and a KPI card must never be the
@@ -128,7 +145,7 @@ class KpiCard extends StatelessWidget {
                   maxLines: 1,
                   style: const TextStyle(
                     fontFamily: 'BricolageGrotesque',
-                    fontSize: 32,
+                    fontSize: 26,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.5,
                   ),
@@ -136,14 +153,14 @@ class KpiCard extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: AppColors.txt3,
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
           ),

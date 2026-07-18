@@ -25,6 +25,11 @@ class ApiEndpoints {
   // per-note audit-trail endpoint — the trail arrives inline as `approvalTrail`
   // on GET /notes/:id.
   static const pendingApprovals = '/approvals/pending';
+
+  /// The caller's own approve/reject history. Returns only their own rows, so
+  /// it needs no role — an approver who raises no notes has no other record of
+  /// their work (`/admin/audit` is admin-only, My Notes is initiator-only).
+  static const myDecisions = '/approvals/my-decisions';
   static String approveNote(String id) => '/notes/$id/approve';
   static String rejectNote(String id) => '/notes/$id/reject';
 
