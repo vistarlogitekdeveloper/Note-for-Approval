@@ -63,9 +63,9 @@ class HierarchyScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(14),
             margin: const EdgeInsets.only(bottom: 20),
             decoration: BoxDecoration(
-              color: AppColors.info.withOpacity(0.08),
+              color: AppColors.info.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.info.withOpacity(0.2)),
+              border: Border.all(color: AppColors.info.withValues(alpha: 0.2)),
             ),
             child: const Row(
               children: [
@@ -244,7 +244,7 @@ class _HierarchyCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: role.isActive
-                  ? AppColors.ok.withOpacity(0.1)
+                  ? AppColors.ok.withValues(alpha: 0.1)
                   : AppColors.surface3,
               borderRadius: BorderRadius.circular(8),
             ),

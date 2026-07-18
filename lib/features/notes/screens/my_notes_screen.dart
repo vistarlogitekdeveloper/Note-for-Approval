@@ -76,7 +76,7 @@ class MyNotesScreen extends ConsumerWidget {
                           horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
                         color: isActive
-                            ? AppColors.pink.withOpacity(0.15)
+                            ? AppColors.pink.withValues(alpha: 0.15)
                             : AppColors.surface2,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
@@ -142,13 +142,19 @@ class _NotesTable extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         child: SingleChildScrollView(
           child: Table(
+            // Intrinsic, not fixed, for every column holding a self-sizing
+            // widget. The old fixed widths were measured against one sample of
+            // content: 110px could not hold the "Approved" pill (85px of pill
+            // in 78px of usable width, hence a 7px overflow) and 100px made
+            // "View →" wrap onto two lines. Only the two free-text columns
+            // flex, because they are the ones that should absorb slack.
             columnWidths: const {
-              0: FixedColumnWidth(120),
-              1: FlexColumnWidth(2),
-              2: FlexColumnWidth(3),
-              3: FixedColumnWidth(110),
-              4: FixedColumnWidth(120),
-              5: FixedColumnWidth(100),
+              0: IntrinsicColumnWidth(), // Note #
+              1: FlexColumnWidth(2), // Purpose
+              2: FlexColumnWidth(3), // Objective
+              3: IntrinsicColumnWidth(), // Status pill
+              4: IntrinsicColumnWidth(), // Date
+              5: IntrinsicColumnWidth(), // Action
             },
             children: [
               // Header
@@ -198,10 +204,20 @@ class _NotesTable extends StatelessWidget {
         _td(StatusPill(n.status)),
         _td(Text(formatDate(n.createdAt),
             style: const TextStyle(color: AppColors.txt3, fontSize: 12.5))),
+        // A draft is still being written and a returned note is waiting to be
+        // revised — both open the form. Anything else is read-only.
         _td(
           TextButton(
-            onPressed: () => context.go('/notes/${n.id}'),
-            child: const Text('View →'),
+            onPressed: () => context.go(
+              n.isDraft || n.isReturned
+                  ? '/notes/${n.id}/edit'
+                  : '/notes/${n.id}',
+            ),
+            child: Text(n.isDraft
+                ? 'Edit →'
+                : n.isReturned
+                    ? 'Revise →'
+                    : 'View →'),
           ),
         ),
       ],

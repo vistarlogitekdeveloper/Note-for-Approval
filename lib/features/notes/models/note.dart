@@ -49,9 +49,55 @@ class NoteAttachment {
       );
 }
 
+/// One level of a note's own approval chain.
+///
+/// A note either carries a chain of these — level 1..N, one named person each,
+/// chosen by the initiator — or it has none and follows the global hierarchy
+/// that every note used before per-note chains existed. An empty list means
+/// the latter, not "no approvers".
+class NoteApprover {
+  final String id;
+  final int level;
+  final String userId;
+
+  /// The label this level carried when the note was raised. Stored per note,
+  /// so renaming a hierarchy role later doesn't rewrite a note in flight.
+  final String roleName;
+
+  final String userName;
+  final String userEmail;
+
+  const NoteApprover({
+    required this.id,
+    required this.level,
+    required this.userId,
+    required this.roleName,
+    required this.userName,
+    required this.userEmail,
+  });
+
+  factory NoteApprover.fromJson(Map<String, dynamic> j) {
+    final user = (j['user'] as Map?)?.cast<String, dynamic>();
+    return NoteApprover(
+      id: j['id'] as String,
+      level: (j['level'] as num?)?.toInt() ?? 0,
+      userId: j['user_id'] as String? ?? '',
+      roleName: j['role_name'] as String? ?? '',
+      userName: user?['name'] as String? ?? 'Unknown',
+      userEmail: user?['email'] as String? ?? '',
+    );
+  }
+}
+
 class ApprovalAction {
   final String id;
   final int level;
+
+  /// Which attempt this decision belongs to. A note that was rejected and
+  /// resubmitted carries decisions from several rounds, and level alone would
+  /// make round 2's "L1 approved" indistinguishable from round 1's.
+  final int revision;
+
   final String roleName;
   final String approverId;
   final String approverName;
@@ -67,6 +113,7 @@ class ApprovalAction {
     required this.approverName,
     required this.action,
     required this.remark,
+    this.revision = 1,
     this.actedAt,
   });
 
@@ -77,6 +124,9 @@ class ApprovalAction {
     return ApprovalAction(
       id: j['id'] as String,
       level: (j['level'] as num?)?.toInt() ?? 0,
+      // Defaults to 1 so a note recorded before rounds existed still reads as
+      // a single first attempt.
+      revision: (j['revision'] as num?)?.toInt() ?? 1,
       roleName: j['role_name'] as String? ?? '',
       approverId: j['approver_id'] as String? ?? '',
       approverName: approver?['name'] as String? ?? 'Unknown',
@@ -99,6 +149,11 @@ class Note {
   final NoteStatus status;
   final int currentLevel; // 0 = not yet submitted, 1..N = at which level
   final int totalLevels; // frozen at submit time
+
+  /// Which attempt the note is on. A rejection returns it to the initiator;
+  /// resubmitting bumps this and restarts at level 1.
+  final int revision;
+
   final String initiatorId;
   final String initiatorName;
   final String initiatorEmail;
@@ -108,6 +163,13 @@ class Note {
 
   /// Populated on `GET /notes/:id` only — always empty in list responses.
   final List<ApprovalAction> approvalTrail;
+
+  /// This note's own approval chain, ordered by level. Empty means the note
+  /// follows the global hierarchy instead — the default, and what every note
+  /// did before per-note chains existed.
+  final List<NoteApprover> approverChain;
+
+  bool get hasCustomChain => approverChain.isNotEmpty;
 
   /// A storage key, not a fetchable URL. Use `GET /notes/:id/pdf` instead.
   final String? pdfUrl;
@@ -127,11 +189,13 @@ class Note {
     required this.status,
     required this.currentLevel,
     required this.totalLevels,
+    this.revision = 1,
     required this.initiatorId,
     required this.initiatorName,
     required this.initiatorEmail,
     required this.attachments,
     required this.approvalTrail,
+    this.approverChain = const [],
     this.pdfUrl,
     this.createdAt,
     this.updatedAt,
@@ -139,6 +203,31 @@ class Note {
 
   bool get isDraft => status == NoteStatus.draft;
   bool get hasPdf => status == NoteStatus.approved;
+
+  /// A rejected note is not dead — it has been sent back to its initiator to
+  /// revise and resubmit. Only they can act on it.
+  bool get isReturned => status == NoteStatus.rejected;
+
+  /// Whether [userId] may edit and resubmit this note right now. Mirrors the
+  /// server's EDITABLE_STATUSES + initiator-only rule.
+  bool editableBy(String? userId) =>
+      userId != null &&
+      initiatorId == userId &&
+      (status == NoteStatus.draft || status == NoteStatus.rejected);
+
+  /// Decisions grouped into rounds, oldest round first, each round's entries
+  /// in level order. A note that was never rejected has a single round.
+  List<MapEntry<int, List<ApprovalAction>>> get trailByRound {
+    final byRound = <int, List<ApprovalAction>>{};
+    for (final a in approvalTrail) {
+      byRound.putIfAbsent(a.revision, () => []).add(a);
+    }
+    final rounds = byRound.keys.toList()..sort();
+    return [
+      for (final r in rounds)
+        MapEntry(r, byRound[r]!..sort((a, b) => a.level.compareTo(b.level)))
+    ];
+  }
 
   factory Note.fromJson(Map<String, dynamic> j) {
     final initiator = (j['initiator'] as Map?)?.cast<String, dynamic>();
@@ -156,6 +245,7 @@ class Note {
       status: NoteStatus.fromString(j['status'] as String? ?? 'draft'),
       currentLevel: (j['current_level'] as num?)?.toInt() ?? 0,
       totalLevels: (j['total_levels'] as num?)?.toInt() ?? 3,
+      revision: (j['revision'] as num?)?.toInt() ?? 1,
       initiatorId: j['initiator_id'] as String? ?? '',
       initiatorName: initiator?['name'] as String? ?? 'Unknown',
       initiatorEmail: initiator?['email'] as String? ?? '',
@@ -165,6 +255,13 @@ class Note {
       approvalTrail: ((j['approvalTrail'] as List?) ?? const [])
           .map((e) => ApprovalAction.fromJson((e as Map).cast<String, dynamic>()))
           .toList(),
+      // The server's include carries no ORDER BY, so level order is whatever
+      // Postgres felt like returning. Sort here — the chain is a sequence and
+      // rendering it out of order would misstate the route.
+      approverChain: ((j['approverChain'] as List?) ?? const [])
+          .map((e) => NoteApprover.fromJson((e as Map).cast<String, dynamic>()))
+          .toList()
+        ..sort((a, b) => a.level.compareTo(b.level)),
       pdfUrl: j['pdf_url'] as String?,
       createdAt: DateTime.tryParse(j['created_at'] as String? ?? ''),
       updatedAt: DateTime.tryParse(j['updated_at'] as String? ?? ''),

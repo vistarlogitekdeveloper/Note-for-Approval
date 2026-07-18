@@ -95,7 +95,7 @@ class KpiCard extends StatelessWidget {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
+                  color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(11),
                 ),
                 child: Icon(icon, color: color, size: 20),
@@ -105,29 +105,42 @@ class KpiCard extends StatelessWidget {
                 width: 120,
                 height: 6,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.08),
+                  color: color.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(6),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          ShaderMask(
-            shaderCallback: (b) => AppColors.ribbon.createShader(b),
-            blendMode: BlendMode.srcIn,
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontFamily: 'BricolageGrotesque',
-                fontSize: 32,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
+          // Flexible + scaleDown so a cramped tile shrinks the number instead
+          // of overflowing. The grid gives these cards a fixed height, but
+          // font metrics vary by platform and a KPI card must never be the
+          // thing that throws a layout error.
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: ShaderMask(
+                shaderCallback: (b) => AppColors.ribbon.createShader(b),
+                blendMode: BlendMode.srcIn,
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontFamily: 'BricolageGrotesque',
+                    fontSize: 32,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                  ),
+                ),
               ),
             ),
           ),
           const SizedBox(height: 4),
           Text(
             label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: AppColors.txt3,
               fontSize: 13,
@@ -195,8 +208,8 @@ class _ShimmerCardState extends State<ShimmerCard>
                         gradient: LinearGradient(
                           colors: [
                             Colors.transparent,
-                            AppColors.pink.withOpacity(0.10),
-                            AppColors.orange.withOpacity(0.08),
+                            AppColors.pink.withValues(alpha: 0.10),
+                            AppColors.orange.withValues(alpha: 0.08),
                             Colors.transparent,
                           ],
                         ),

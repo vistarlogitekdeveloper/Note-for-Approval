@@ -1,28 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/user.dart';
+import '../../../shared/widgets/app_feedback.dart';
 import '../../../shared/widgets/common_widgets.dart';
 import '../../../shared/widgets/gradient_button.dart';
+import '../data/admin_repository.dart';
 
-// ── Mock provider (replace with real API) ────────────────────────────────────
 final usersAdminProvider = FutureProvider<List<User>>((ref) async {
-  await Future.delayed(const Duration(milliseconds: 600));
-  return [
-    User(id: '1', name: 'Arjun Sharma', email: 'arjun@vistar.com',
-        role: UserRole.initiator, isActive: true),
-    User(id: '2', name: 'Priya Mehta', email: 'priya@vistar.com',
-        role: UserRole.approver, hierarchyLevel: 1,
-        hierarchyRoleName: 'Department Head', isActive: true),
-    User(id: '3', name: 'Rohit Verma', email: 'rohit@vistar.com',
-        role: UserRole.approver, hierarchyLevel: 2,
-        hierarchyRoleName: 'General Manager', isActive: true),
-    User(id: '4', name: 'Sita Nair', email: 'sita@vistar.com',
-        role: UserRole.admin, isActive: true),
-    User(id: '5', name: 'Kiran Patel', email: 'kiran@vistar.com',
-        role: UserRole.initiator, isActive: false),
-  ];
+  return ref.read(adminRepositoryProvider).getUsers();
+});
+
+/// The levels an approver can be assigned to. Needed by the user dialog, which
+/// must send a `hierarchy_level` whenever the role is `approver`.
+final hierarchyLevelsProvider = FutureProvider<List<HierarchyLevel>>((ref) async {
+  return ref.read(adminRepositoryProvider).getHierarchy();
 });
 
 class UsersAdminScreen extends ConsumerWidget {
@@ -57,7 +51,7 @@ class UsersAdminScreen extends ConsumerWidget {
               GradientButton(
                 label: 'Add User',
                 icon: Icons.person_add_outlined,
-                onPressed: () => _showUserDialog(context),
+                onPressed: () => _openUserDialog(context, ref),
               ),
             ],
           ),
@@ -83,72 +77,283 @@ class UsersAdminScreen extends ConsumerWidget {
     );
   }
 
-  void _showUserDialog(BuildContext context, [User? user]) {
-    final nameCtrl = TextEditingController(text: user?.name);
-    final emailCtrl = TextEditingController(text: user?.email);
-    UserRole? selectedRole = user?.role ?? UserRole.initiator;
+}
 
-    showDialog(
-      context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: Text(user == null ? 'Add User' : 'Edit User'),
-          content: SizedBox(
-            width: 440,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameCtrl,
-                  style: const TextStyle(color: AppColors.txt),
-                  decoration: const InputDecoration(labelText: 'Full Name *'),
+/// Opens the add/edit user dialog and reports the result once it closes.
+Future<void> _openUserDialog(
+  BuildContext context,
+  WidgetRef ref, [
+  User? user,
+]) async {
+  final saved = await showDialog<bool>(
+    context: context,
+    builder: (_) => _UserDialog(user: user),
+  );
+  if (saved != true || !context.mounted) return;
+
+  ref.invalidate(usersAdminProvider);
+  AppFeedback.success(
+    context,
+    user == null ? 'User created.' : 'User updated.',
+  );
+}
+
+/// Add / edit a user.
+///
+/// Own widget so controllers are disposed, the buttons disable while the call
+/// is in flight, failures are shown inline instead of disappearing, and the
+/// pop uses the DIALOG's context — popping with the screen's context resolves
+/// to the ShellRoute's nested Navigator and closes the page instead.
+class _UserDialog extends ConsumerStatefulWidget {
+  const _UserDialog({this.user});
+  final User? user;
+
+  @override
+  ConsumerState<_UserDialog> createState() => _UserDialogState();
+}
+
+class _UserDialogState extends ConsumerState<_UserDialog> {
+  late final _nameCtrl = TextEditingController(text: widget.user?.name);
+  late final _emailCtrl = TextEditingController(text: widget.user?.email);
+  final _passwordCtrl = TextEditingController();
+
+  late UserRole _role = widget.user?.role ?? UserRole.initiator;
+  late int? _level = widget.user?.hierarchyLevel;
+
+  bool _saving = false;
+  String? _error;
+
+  bool get _isEdit => widget.user != null;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
+    super.dispose();
+  }
+
+  String? _validate() {
+    if (_nameCtrl.text.trim().isEmpty) return 'Full name is required.';
+    final email = _emailCtrl.text.trim();
+    if (email.isEmpty) return 'Email is required.';
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+      return 'That does not look like a valid email address.';
+    }
+    // The server requires a password on create and enforces a 6-char minimum
+    // on both paths. On edit it is optional and means "leave unchanged".
+    final pw = _passwordCtrl.text;
+    if (!_isEdit && pw.isEmpty) return 'A password is required.';
+    if (pw.isNotEmpty && pw.length < 6) {
+      return 'Password must be at least 6 characters.';
+    }
+    if (_role == UserRole.approver && _level == null) {
+      return 'An approver must be assigned a hierarchy level.';
+    }
+    return null;
+  }
+
+  Future<void> _save() async {
+    final problem = _validate();
+    if (problem != null) {
+      setState(() => _error = problem);
+      return;
+    }
+
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+
+    final repo = ref.read(adminRepositoryProvider);
+    try {
+      if (_isEdit) {
+        await repo.updateUser(
+          widget.user!.id,
+          name: _nameCtrl.text.trim(),
+          email: _emailCtrl.text.trim(),
+          role: _role,
+          password: _passwordCtrl.text.isEmpty ? null : _passwordCtrl.text,
+          hierarchyLevel: _level,
+        );
+      } else {
+        await repo.createUser(
+          name: _nameCtrl.text.trim(),
+          email: _emailCtrl.text.trim(),
+          role: _role,
+          password: _passwordCtrl.text,
+          hierarchyLevel: _level,
+        );
+      }
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = e is ApiException ? e.displayMessage : e.toString();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final levelsAsync = ref.watch(hierarchyLevelsProvider);
+
+    return AlertDialog(
+      backgroundColor: AppColors.surface,
+      title: Text(_isEdit ? 'Edit User' : 'Add User',
+          style: const TextStyle(color: AppColors.txt, fontSize: 17)),
+      content: SizedBox(
+        width: 440,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _nameCtrl,
+                enabled: !_saving,
+                style: const TextStyle(color: AppColors.txt),
+                decoration: const InputDecoration(labelText: 'Full Name *'),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _emailCtrl,
+                enabled: !_saving,
+                keyboardType: TextInputType.emailAddress,
+                style: const TextStyle(color: AppColors.txt),
+                decoration: const InputDecoration(labelText: 'Email *'),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _passwordCtrl,
+                enabled: !_saving,
+                obscureText: true,
+                style: const TextStyle(color: AppColors.txt),
+                decoration: InputDecoration(
+                  labelText: _isEdit ? 'New Password' : 'Password *',
+                  helperText: _isEdit
+                      ? 'Leave blank to keep the current password'
+                      : 'At least 6 characters',
                 ),
+              ),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<UserRole>(
+                initialValue: _role,
+                dropdownColor: AppColors.surface2,
+                style: const TextStyle(color: AppColors.txt),
+                decoration: const InputDecoration(labelText: 'Role *'),
+                items: UserRole.values
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r.label)))
+                    .toList(),
+                onChanged: _saving
+                    ? null
+                    : (v) => setState(() {
+                          _role = v ?? UserRole.initiator;
+                          // Only approvers carry a level; the server pins it to
+                          // null for everyone else.
+                          if (_role != UserRole.approver) _level = null;
+                        }),
+              ),
+
+              // Level is required for approvers and meaningless otherwise.
+              if (_role == UserRole.approver) ...[
                 const SizedBox(height: 14),
-                TextField(
-                  controller: emailCtrl,
-                  style: const TextStyle(color: AppColors.txt),
-                  decoration: const InputDecoration(labelText: 'Email *'),
-                ),
-                const SizedBox(height: 14),
-                DropdownButtonFormField<UserRole>(
-                  value: selectedRole,
-                  dropdownColor: AppColors.surface2,
-                  style: const TextStyle(color: AppColors.txt),
-                  decoration: const InputDecoration(labelText: 'Role *'),
-                  items: UserRole.values
-                      .map((r) => DropdownMenuItem(
-                            value: r,
-                            child: Text(r.label),
-                          ))
-                      .toList(),
-                  onChanged: (v) => setState(() => selectedRole = v),
+                levelsAsync.when(
+                  loading: () => const ShimmerCard(height: 52),
+                  error: (e, _) => Text(
+                    'Could not load hierarchy levels: $e',
+                    style: const TextStyle(color: AppColors.bad, fontSize: 12.5),
+                  ),
+                  data: (levels) {
+                    final active = levels.where((l) => l.isActive).toList();
+                    final value =
+                        active.any((l) => l.level == _level) ? _level : null;
+                    return DropdownButtonFormField<int>(
+                      initialValue: value,
+                      dropdownColor: AppColors.surface2,
+                      style: const TextStyle(color: AppColors.txt),
+                      decoration:
+                          const InputDecoration(labelText: 'Hierarchy Level *'),
+                      items: active
+                          .map((l) => DropdownMenuItem(
+                                value: l.level,
+                                child: Text('L${l.level} — ${l.name}'),
+                              ))
+                          .toList(),
+                      onChanged:
+                          _saving ? null : (v) => setState(() => _level = v),
+                    );
+                  },
                 ),
               ],
-            ),
+
+              if (_error != null) ...[
+                const SizedBox(height: 14),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.error_outline,
+                        size: 15, color: AppColors.bad),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(_error!,
+                          style: const TextStyle(
+                              color: AppColors.bad, fontSize: 12.5)),
+                    ),
+                  ],
+                ),
+              ],
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            GradientButton(
-              label: user == null ? 'Create User' : 'Save Changes',
-              small: true,
-              onPressed: () => Navigator.pop(context),
-            ),
-          ],
         ),
       ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        GradientButton(
+          label: _saving
+              ? 'Saving…'
+              : (_isEdit ? 'Save Changes' : 'Create User'),
+          small: true,
+          loading: _saving,
+          onPressed: _saving ? null : _save,
+        ),
+      ],
     );
   }
 }
 
-class _UsersTable extends StatelessWidget {
+class _UsersTable extends ConsumerWidget {
   const _UsersTable({required this.users});
   final List<User> users;
 
+  /// Activate / deactivate. The server refuses to let you deactivate yourself,
+  /// and says so — that message is worth showing verbatim rather than
+  /// second-guessing it here.
+  Future<void> _toggleActive(
+      BuildContext context, WidgetRef ref, User u) async {
+    try {
+      await ref
+          .read(adminRepositoryProvider)
+          .updateUser(u.id, isActive: !u.isActive);
+      if (!context.mounted) return;
+      ref.invalidate(usersAdminProvider);
+      AppFeedback.success(
+        context,
+        u.isActive ? '${u.name} deactivated.' : '${u.name} activated.',
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      AppFeedback.error(context, e);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.line),
@@ -159,13 +364,16 @@ class _UsersTable extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         child: SingleChildScrollView(
           child: Table(
+            // Self-sizing columns are intrinsic, not fixed — a role name or
+            // status pill wider than the guess overflows, as the notes table
+            // did. Name and email flex to absorb the slack.
             columnWidths: const {
               0: FlexColumnWidth(2),
               1: FlexColumnWidth(2),
-              2: FixedColumnWidth(130),
-              3: FixedColumnWidth(180),
-              4: FixedColumnWidth(90),
-              5: FixedColumnWidth(80),
+              2: IntrinsicColumnWidth(),
+              3: IntrinsicColumnWidth(),
+              4: IntrinsicColumnWidth(),
+              5: IntrinsicColumnWidth(),
             },
             children: [
               TableRow(
@@ -186,7 +394,7 @@ class _UsersTable extends StatelessWidget {
                         ))
                     .toList(),
               ),
-              ...users.map((u) => _userRow(context, u)),
+              ...users.map((u) => _userRow(context, ref, u)),
             ],
           ),
         ),
@@ -194,7 +402,7 @@ class _UsersTable extends StatelessWidget {
     );
   }
 
-  TableRow _userRow(BuildContext context, User u) {
+  TableRow _userRow(BuildContext context, WidgetRef ref, User u) {
     return TableRow(
       decoration: const BoxDecoration(
         border: Border(top: BorderSide(color: AppColors.line)),
@@ -234,7 +442,7 @@ class _UsersTable extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: u.isActive
-                  ? AppColors.ok.withOpacity(0.12)
+                  ? AppColors.ok.withValues(alpha: 0.12)
                   : AppColors.surface3,
               borderRadius: BorderRadius.circular(20),
             ),
@@ -259,7 +467,13 @@ class _UsersTable extends StatelessWidget {
                 child: Text(u.isActive ? 'Deactivate' : 'Activate'),
               ),
             ],
-            onSelected: (_) {},
+            onSelected: (choice) {
+              if (choice == 'edit') {
+                _openUserDialog(context, ref, u);
+              } else {
+                _toggleActive(context, ref, u);
+              }
+            },
           ),
         ),
       ],
@@ -292,7 +506,7 @@ class _UsersTable extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(

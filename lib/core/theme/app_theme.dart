@@ -166,8 +166,8 @@ class AppTheme {
       // Scrollbar
       scrollbarTheme: ScrollbarThemeData(
         thumbColor: WidgetStateProperty.resolveWith((s) {
-          if (s.contains(WidgetState.hovered)) return AppColors.pink.withOpacity(0.6);
-          return AppColors.violet.withOpacity(0.3);
+          if (s.contains(WidgetState.hovered)) return AppColors.pink.withValues(alpha: 0.6);
+          return AppColors.violet.withValues(alpha: 0.3);
         }),
         radius: const Radius.circular(6),
         thickness: WidgetStateProperty.all(4),
@@ -179,7 +179,7 @@ class AppTheme {
             s.contains(WidgetState.selected) ? AppColors.pink : AppColors.txt3),
         trackColor: WidgetStateProperty.resolveWith((s) =>
             s.contains(WidgetState.selected)
-                ? AppColors.pink.withOpacity(0.25)
+                ? AppColors.pink.withValues(alpha: 0.25)
                 : AppColors.surface3),
       ),
     );

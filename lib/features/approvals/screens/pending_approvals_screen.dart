@@ -22,18 +22,38 @@ class PendingApprovalsScreen extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Pending Approvals',
-            style: GoogleFonts.bricolageGrotesque(
-              color: AppColors.txt,
-              fontSize: 28,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
-            ),
-          ),
-          const Text(
-            'Notes awaiting your action at your hierarchy level',
-            style: TextStyle(color: AppColors.txt3, fontSize: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pending Approvals',
+                      style: GoogleFonts.bricolageGrotesque(
+                        color: AppColors.txt,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    const Text(
+                      'Notes awaiting your action',
+                      style: TextStyle(color: AppColors.txt3, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+              // A queue fills up while you are looking at it, and nothing
+              // pushes to the client — without this the only way to see a new
+              // note is to navigate away and back.
+              GhostButton(
+                label: 'Refresh',
+                icon: Icons.refresh_rounded,
+                onPressed: () => ref.invalidate(pendingApprovalsProvider),
+              ),
+            ],
           ),
           const SizedBox(height: 24),
 

@@ -42,6 +42,12 @@ dependencies:
   # HTTP client
   dio: ^5.7.0
 
+  # Browser download of PDFs/attachments. Both endpoints need the Bearer
+  # token, so the bytes come through Dio and are saved via a Blob — see
+  # core/utils/file_download_web.dart. Declared directly rather than leaned on
+  # as a transitive dependency.
+  web: ^1.1.0
+
   # Secure storage for JWT
   flutter_secure_storage: ^9.2.2
 
@@ -57,11 +63,22 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.1
 
+  # Build-time only, for tool/prepare_logos.dart — keys the backdrop out of the
+  # source logos and emits the sizes the design system uses. Deliberately a dev
+  # dependency so it never ships in the app bundle.
+  image: ^4.3.0
+
 flutter:
   uses-material-design: true
 
+  # Only the prepared marks are bundled. The 2 MB `logo.png` / `logo_name.png`
+  # sources stay in the repo for regeneration (tool/prepare_logos.dart) but are
+  # deliberately NOT listed — shipping them would add ~4 MB to the web payload
+  # for pixels that are 89% transparent margin.
   assets:
-    - assets/images/
+    - assets/images/mark.png
+    - assets/images/mark_sm.png
+    - assets/images/wordmark.png
 
 flutter_launcher_icons:
   image_path: "icon/app_icon.png"

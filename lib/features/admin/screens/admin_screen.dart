@@ -17,25 +17,11 @@ class AdminScreen extends ConsumerWidget {
       color: AppColors.info,
     ),
     _AdminTile(
-      icon: Icons.account_tree_outlined,
-      title: 'Approval Hierarchy',
-      subtitle: 'Define and reorder approval levels',
-      path: '/admin/hierarchy',
-      color: AppColors.violet,
-    ),
-    _AdminTile(
       icon: Icons.list_alt_outlined,
       title: 'Purpose Masters',
       subtitle: 'Manage Purpose/Objective dropdown values',
       path: '/admin/masters',
       color: AppColors.orange,
-    ),
-    _AdminTile(
-      icon: Icons.email_outlined,
-      title: 'SMTP Settings',
-      subtitle: 'Configure email server for notifications',
-      path: '/admin/smtp',
-      color: AppColors.ok,
     ),
     _AdminTile(
       icon: Icons.history_outlined,
@@ -116,7 +102,7 @@ class _AdminCard extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: tile.color.withOpacity(0.12),
+              color: tile.color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(tile.icon, color: tile.color, size: 24),

@@ -71,7 +71,7 @@ class _GradientButtonState extends State<GradientButton>
                 ? null
                 : [
                     BoxShadow(
-                      color: AppColors.pink.withOpacity(0.35),
+                      color: AppColors.pink.withValues(alpha: 0.35),
                       blurRadius: 24,
                       offset: const Offset(0, 8),
                     ),
@@ -131,7 +131,7 @@ class GhostButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = danger ? AppColors.bad : AppColors.txt2;
-    final border = danger ? AppColors.bad.withOpacity(0.4) : AppColors.line2;
+    final border = danger ? AppColors.bad.withValues(alpha: 0.4) : AppColors.line2;
     final h = small ? 36.0 : 44.0;
     final fz = small ? 12.5 : 14.0;
 

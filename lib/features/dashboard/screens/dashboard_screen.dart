@@ -123,6 +123,24 @@ class DashboardScreen extends ConsumerWidget {
   }
 }
 
+/// The KPI tiles size themselves by a FIXED height, deliberately not by an
+/// aspect ratio.
+///
+/// With `childAspectRatio` the tile height is derived from its width, so at
+/// narrow-but-still-multi-column widths the tiles became shorter than the
+/// content they hold — a 38px icon, a 32px number and a label cannot fit in
+/// ~133px — and every card reported a bottom overflow.
+///
+/// `maxCrossAxisExtent` also replaces the hand-rolled breakpoints: the grid
+/// fits as many columns as it can at up to 320px each, so it stays responsive
+/// without any width thresholds to keep in sync.
+const kpiGridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
+  maxCrossAxisExtent: 320,
+  crossAxisSpacing: 16,
+  mainAxisSpacing: 16,
+  mainAxisExtent: 168,
+);
+
 class _KpiGrid extends StatelessWidget {
   const _KpiGrid({required this.stats, required this.user});
   final DashboardStats stats;
@@ -130,16 +148,11 @@ class _KpiGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (ctx, c) {
-      final cols = c.maxWidth > 900 ? 4 : c.maxWidth > 600 ? 2 : 1;
-      return GridView.count(
-        crossAxisCount: cols,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 1.6,
-        children: [
+    return GridView(
+      gridDelegate: kpiGridDelegate,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      children: [
           KpiCard(
             label: 'Total Notes',
             value: '${stats.totalNotes}',
@@ -158,15 +171,14 @@ class _KpiGrid extends StatelessWidget {
             icon: Icons.check_circle_outline_rounded,
             color: AppColors.ok,
           ),
-          KpiCard(
-            label: 'Rejected',
-            value: '${stats.rejectedNotes}',
-            icon: Icons.cancel_outlined,
-            color: AppColors.bad,
-          ),
-        ],
-      );
-    });
+        KpiCard(
+          label: 'Rejected',
+          value: '${stats.rejectedNotes}',
+          icon: Icons.cancel_outlined,
+          color: AppColors.bad,
+        ),
+      ],
+    );
   }
 }
 
@@ -175,14 +187,13 @@ class _KpiGridShimmer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 4,
+    // Same delegate as the real grid, so the layout does not jump when the
+    // stats land.
+    return GridView(
+      gridDelegate: kpiGridDelegate,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
-      childAspectRatio: 1.6,
-      children: List.generate(4, (_) => const ShimmerCard(height: 120)),
+      children: List.generate(4, (_) => const ShimmerCard(height: 168)),
     );
   }
 }
@@ -196,9 +207,9 @@ class _PendingBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.warn.withOpacity(0.08),
+        color: AppColors.warn.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.warn.withOpacity(0.25)),
+        border: Border.all(color: AppColors.warn.withValues(alpha: 0.25)),
       ),
       child: Row(
         children: [
@@ -229,9 +240,9 @@ class _NoPendingBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.ok.withOpacity(0.07),
+        color: AppColors.ok.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.ok.withOpacity(0.2)),
+        border: Border.all(color: AppColors.ok.withValues(alpha: 0.2)),
       ),
       child: const Row(
         children: [

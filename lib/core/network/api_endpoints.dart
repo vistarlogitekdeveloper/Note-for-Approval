@@ -32,6 +32,11 @@ class ApiEndpoints {
   static const purposes = '/masters/purposes';
   static String purposeById(String id) => '/masters/purposes/$id';
 
+  /// The people who may be put on a note's own approval chain. Open to any
+  /// authenticated user, because an initiator has to pick from it while
+  /// raising a note — `/admin/users` is admin-only and cannot serve this.
+  static const approvers = '/masters/approvers';
+
   // ── Hierarchy ────────────────────────────────────────────────────────────
   //
   // Read and update only. Levels cannot be created, deleted, or reordered

@@ -132,10 +132,12 @@ class _AuditTable extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         child: SingleChildScrollView(
           child: Table(
+            // Timestamp, action pill and actor size to their content; the two
+            // free-text columns take the remaining width.
             columnWidths: const {
-              0: FixedColumnWidth(160),
-              1: FixedColumnWidth(110),
-              2: FixedColumnWidth(140),
+              0: IntrinsicColumnWidth(),
+              1: IntrinsicColumnWidth(),
+              2: IntrinsicColumnWidth(),
               3: FlexColumnWidth(2),
               4: FlexColumnWidth(3),
             },

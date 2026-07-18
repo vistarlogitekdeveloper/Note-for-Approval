@@ -162,13 +162,13 @@ class _SmtpSettingsScreenState extends ConsumerState<SmtpSettingsScreen> {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: _testResult!.startsWith('✓')
-                          ? AppColors.ok.withOpacity(0.1)
-                          : AppColors.bad.withOpacity(0.1),
+                          ? AppColors.ok.withValues(alpha: 0.1)
+                          : AppColors.bad.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: _testResult!.startsWith('✓')
-                            ? AppColors.ok.withOpacity(0.3)
-                            : AppColors.bad.withOpacity(0.3),
+                            ? AppColors.ok.withValues(alpha: 0.3)
+                            : AppColors.bad.withValues(alpha: 0.3),
                       ),
                     ),
                     child: Row(

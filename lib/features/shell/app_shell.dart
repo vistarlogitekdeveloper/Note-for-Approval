@@ -6,6 +6,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../shared/models/user.dart';
+import '../../shared/widgets/vistar_brand.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key, required this.child});
@@ -26,9 +27,12 @@ class _AppShellState extends ConsumerState<AppShell> {
     final isMobile = size.width < 768;
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      // Transparent so the ambient aurora + watermark below shows through;
+      // AmbientBackground paints the base colour itself.
+      backgroundColor: Colors.transparent,
       drawer: isMobile ? _buildSidebar(user, isMobile: true) : null,
-      body: Row(
+      body: AmbientBackground(
+        child: Row(
         children: [
           if (!isMobile)
             AnimatedContainer(
@@ -54,6 +58,7 @@ class _AppShellState extends ConsumerState<AppShell> {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -122,9 +127,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                   if (role?.canAdmin ?? false) ...[
                     _navGroup('Administration', [
                       _NavItem(icon: Icons.people_outlined, label: 'Users', path: '/admin/users', collapsed: collapsed),
-                      _NavItem(icon: Icons.account_tree_outlined, label: 'Hierarchy', path: '/admin/hierarchy', collapsed: collapsed),
                       _NavItem(icon: Icons.list_alt_outlined, label: 'Masters', path: '/admin/masters', collapsed: collapsed),
-                      _NavItem(icon: Icons.email_outlined, label: 'SMTP Settings', path: '/admin/smtp', collapsed: collapsed),
                       _NavItem(icon: Icons.history_outlined, label: 'Audit Log', path: '/admin/audit', collapsed: collapsed),
                     ], collapsed: collapsed),
                   ],
@@ -234,7 +237,7 @@ class _NavItem extends ConsumerWidget {
             ),
             decoration: BoxDecoration(
               color: isActive
-                  ? AppColors.pink.withOpacity(0.1)
+                  ? AppColors.pink.withValues(alpha: 0.1)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
             ),
@@ -285,24 +288,10 @@ class _SidebarLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = small ? 28.0 : 32.0;
-    return Container(
-      width: s,
-      height: s,
-      decoration: BoxDecoration(
-        gradient: AppColors.ribbon,
-        borderRadius: BorderRadius.circular(s * 0.28),
-      ),
-      child: Center(
-        child: Text(
-          'V',
-          style: GoogleFonts.bricolageGrotesque(
-            color: Colors.white,
-            fontSize: s * 0.55,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ),
-    );
+    // The real S mark, not a letter. The ribbon gradient stays out of this
+    // tile: the mark already carries the full ribbon, and putting it on a
+    // ribbon fill turns both to mud.
+    return VistarBrandGlyph(size: s, radius: s * 0.28);
   }
 }
 

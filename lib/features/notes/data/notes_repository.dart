@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_endpoints.dart';
 import '../../../features/notes/models/note.dart';
+import '../../../shared/models/user.dart';
 
 final notesRepositoryProvider = Provider<NotesRepository>(
   (ref) => NotesRepository(ref.read(apiClientProvider)),
@@ -21,6 +22,18 @@ class AttachmentUpload {
   final String fileName;
   final Uint8List? bytes;
   final String? path;
+}
+
+/// One rung of a note's approval chain as the form holds it, before it is sent.
+/// Level is positional — the order of the list is the order of approval — so it
+/// is assigned at send time rather than stored here, where a stale index would
+/// silently reorder the route.
+class ApproverChoice {
+  const ApproverChoice({required this.userId, this.roleName});
+  final String userId;
+
+  /// Defaults server-side to the user's own hierarchy role name.
+  final String? roleName;
 }
 
 /// The result of an approve/reject. Email and PDF generation run after the
@@ -127,6 +140,39 @@ class NotesRepository {
     return res.asList.map(PurposeMaster.fromJson).toList();
   }
 
+  // ── Purpose masters (admin writes) ────────────────────────────────────────
+
+  Future<PurposeMaster> createPurpose(String name) async {
+    final res = await _api.post(ApiEndpoints.purposes, data: {'name': name});
+    return PurposeMaster.fromJson(res.asMap);
+  }
+
+  Future<PurposeMaster> updatePurpose(String id, {String? name, bool? isActive}) async {
+    final res = await _api.patch(ApiEndpoints.purposeById(id), data: {
+      if (name != null) 'name': name,
+      if (isActive != null) 'is_active': isActive,
+    });
+    return PurposeMaster.fromJson(res.asMap);
+  }
+
+  /// Soft-deletes when any note references the purpose — an approved note has
+  /// to keep resolving its purpose for the PDF. The response says which
+  /// happened; `true` means it was only deactivated.
+  Future<bool> deletePurpose(String id) async {
+    final res = await _api.delete(ApiEndpoints.purposeById(id));
+    final data = res.data;
+    return data is Map && data['soft_deleted'] == true;
+  }
+
+  /// The people who can be put on a note's own approval chain: active users who
+  /// are able to approve something. Returns the same shape as the user admin
+  /// endpoints but is readable by any signed-in user, since an initiator needs
+  /// it to build a chain.
+  Future<List<User>> getSelectableApprovers() async {
+    final res = await _api.get(ApiEndpoints.approvers);
+    return res.asList.map(User.fromJson).toList();
+  }
+
   // ── Writes ────────────────────────────────────────────────────────────────
 
   Future<Note> createNote(Map<String, dynamic> data) async {
@@ -230,6 +276,22 @@ class NotesRepository {
       // driven by the submit/approve endpoints, never by the note body.
       if (wireKey != null && value != null) out[wireKey] = value;
     });
+
+    // The approval chain is a list of objects rather than a scalar, so it does
+    // not go through _wireKeys. An empty list is meaningful and must survive:
+    // it clears a chain back to the global hierarchy. Absent means "leave as
+    // is", which is why null is dropped and [] is not.
+    final chain = form['approvers'];
+    if (chain is List<ApproverChoice>) {
+      out['approvers'] = [
+        for (var i = 0; i < chain.length; i++)
+          {
+            'level': i + 1,
+            'user_id': chain[i].userId,
+            if (chain[i].roleName != null) 'role_name': chain[i].roleName,
+          }
+      ];
+    }
     return out;
   }
 

@@ -1,23 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../features/notes/data/notes_repository.dart';
 import '../../../features/notes/models/note.dart';
+import '../../../features/notes/providers/notes_provider.dart';
+import '../../../shared/widgets/app_feedback.dart';
 import '../../../shared/widgets/common_widgets.dart';
 import '../../../shared/widgets/gradient_button.dart';
 
+/// Admin view of the purpose list, so it includes deactivated rows — the note
+/// form's [purposesProvider] deliberately shows only active ones.
 final purposesMasterProvider = FutureProvider<List<PurposeMaster>>((ref) async {
-  await Future.delayed(const Duration(milliseconds: 400));
-  return [
-    const PurposeMaster(id: '1', name: 'Capital Expenditure', isActive: true),
-    const PurposeMaster(id: '2', name: 'Operational Expenditure', isActive: true),
-    const PurposeMaster(id: '3', name: 'Policy Change', isActive: true),
-    const PurposeMaster(id: '4', name: 'Process Improvement', isActive: true),
-    const PurposeMaster(id: '5', name: 'Vendor Empanelment', isActive: true),
-    const PurposeMaster(id: '6', name: 'Hiring Approval', isActive: true),
-    const PurposeMaster(id: '7', name: 'IT Infrastructure', isActive: false),
-    const PurposeMaster(id: '8', name: 'Regulatory Compliance', isActive: true),
-  ];
+  return ref.read(notesRepositoryProvider).getPurposes(includeInactive: true);
 });
 
 class MastersScreen extends ConsumerWidget {
@@ -52,7 +48,7 @@ class MastersScreen extends ConsumerWidget {
               GradientButton(
                 label: 'Add Purpose',
                 icon: Icons.add_rounded,
-                onPressed: () => _showPurposeDialog(context),
+                onPressed: () => _openPurposeDialog(context, ref),
               ),
             ],
           ),
@@ -78,43 +74,171 @@ class MastersScreen extends ConsumerWidget {
     );
   }
 
-  void _showPurposeDialog(BuildContext context, [PurposeMaster? item]) {
-    final nameCtrl = TextEditingController(text: item?.name);
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(item == null ? 'Add Purpose' : 'Edit Purpose'),
-        content: SizedBox(
-          width: 380,
-          child: TextField(
-            controller: nameCtrl,
-            autofocus: true,
-            style: const TextStyle(color: AppColors.txt),
-            decoration: const InputDecoration(labelText: 'Purpose Name *'),
-          ),
+}
+
+/// Opens the add/edit dialog and reports the outcome once it closes.
+///
+/// The dialog reports its own failures inline (so the user can correct and
+/// retry without retyping); success is announced out here, against the screen
+/// that outlives it.
+Future<void> _openPurposeDialog(
+  BuildContext context,
+  WidgetRef ref, [
+  PurposeMaster? item,
+]) async {
+  final saved = await showDialog<bool>(
+    context: context,
+    builder: (_) => _PurposeDialog(item: item),
+  );
+  if (saved != true || !context.mounted) return;
+
+  ref.invalidate(purposesMasterProvider);
+  // The note form reads its own active-only list; it would otherwise keep
+  // offering a stale set of purposes.
+  ref.invalidate(purposesProvider);
+  AppFeedback.success(
+    context,
+    item == null ? 'Purpose added.' : 'Purpose updated.',
+  );
+}
+
+/// Add / edit a purpose.
+///
+/// Its own widget rather than an inline builder so the controller is disposed,
+/// the in-flight state can disable the buttons, and — the bug this replaces —
+/// the pop uses the DIALOG's context. `showDialog` mounts on the root
+/// Navigator while these screens sit inside a go_router ShellRoute's nested
+/// one, so popping with the screen's context closed the page and left the
+/// dialog on screen.
+class _PurposeDialog extends ConsumerStatefulWidget {
+  const _PurposeDialog({this.item});
+  final PurposeMaster? item;
+
+  @override
+  ConsumerState<_PurposeDialog> createState() => _PurposeDialogState();
+}
+
+class _PurposeDialogState extends ConsumerState<_PurposeDialog> {
+  late final TextEditingController _nameCtrl =
+      TextEditingController(text: widget.item?.name);
+  bool _saving = false;
+  String? _error;
+
+  bool get _isEdit => widget.item != null;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = 'Purpose name is required.');
+      return;
+    }
+
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+
+    final repo = ref.read(notesRepositoryProvider);
+    try {
+      if (_isEdit) {
+        await repo.updatePurpose(widget.item!.id, name: name);
+      } else {
+        await repo.createPurpose(name);
+      }
+      if (!mounted) return;
+      // Pop first, then report: the SnackBar belongs to the screen underneath,
+      // which outlives this dialog.
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = e is ApiException ? e.displayMessage : e.toString();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.surface,
+      title: Text(_isEdit ? 'Edit Purpose' : 'Add Purpose',
+          style: const TextStyle(color: AppColors.txt, fontSize: 17)),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _nameCtrl,
+              autofocus: true,
+              enabled: !_saving,
+              style: const TextStyle(color: AppColors.txt),
+              decoration: const InputDecoration(labelText: 'Purpose Name *'),
+              onSubmitted: (_) => _saving ? null : _save(),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(_error!,
+                  style: const TextStyle(color: AppColors.bad, fontSize: 12.5)),
+            ],
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          GradientButton(
-            label: item == null ? 'Add' : 'Save',
-            small: true,
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
       ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        GradientButton(
+          label: _saving ? 'Saving…' : (_isEdit ? 'Save' : 'Add'),
+          small: true,
+          loading: _saving,
+          onPressed: _saving ? null : _save,
+        ),
+      ],
     );
   }
 }
 
-class _PurposesList extends StatelessWidget {
+class _PurposesList extends ConsumerWidget {
   const _PurposesList({required this.items});
   final List<PurposeMaster> items;
 
+  /// Flips a purpose active/inactive. Deactivating is how a purpose is retired
+  /// without breaking notes that already reference it.
+  Future<void> _toggle(
+    BuildContext context,
+    WidgetRef ref,
+    PurposeMaster item,
+    bool value,
+  ) async {
+    try {
+      await ref
+          .read(notesRepositoryProvider)
+          .updatePurpose(item.id, isActive: value);
+      if (!context.mounted) return;
+      ref.invalidate(purposesMasterProvider);
+      ref.invalidate(purposesProvider);
+      AppFeedback.success(
+        context,
+        value ? '"${item.name}" is active again.' : '"${item.name}" deactivated.',
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      AppFeedback.error(context, e);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.line),
@@ -162,7 +286,7 @@ class _PurposesList extends StatelessWidget {
                             padding: const EdgeInsets.all(12),
                             child: Switch(
                               value: item.isActive,
-                              onChanged: (_) {},
+                              onChanged: (v) => _toggle(context, ref, item, v),
                             ),
                           ),
                         ),
@@ -170,9 +294,11 @@ class _PurposesList extends StatelessWidget {
                           width: 80,
                           child: Center(
                             child: IconButton(
+                              tooltip: 'Edit',
                               icon: const Icon(Icons.edit_outlined,
                                   size: 18, color: AppColors.txt3),
-                              onPressed: () {},
+                              onPressed: () =>
+                                  _openPurposeDialog(context, ref, item),
                             ),
                           ),
                         ),

@@ -11,11 +11,10 @@ import '../../features/notes/screens/note_detail_screen.dart';
 import '../../features/approvals/screens/pending_approvals_screen.dart';
 import '../../features/admin/screens/admin_screen.dart';
 import '../../features/admin/screens/users_screen.dart';
-import '../../features/admin/screens/hierarchy_screen.dart';
 import '../../features/admin/screens/masters_screen.dart';
-import '../../features/admin/screens/smtp_settings_screen.dart';
 import '../../features/admin/screens/audit_screen.dart';
 import '../../features/shell/app_shell.dart';
+import '../../shared/widgets/vistar_brand.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authProvider);
@@ -55,8 +54,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/splash',
         builder: (context, state) => const Scaffold(
-          body: Center(
-            child: CircularProgressIndicator(),
+          backgroundColor: Colors.transparent,
+          // The orbit loader is the app's first impression, and it is what
+          // the session-restore wait is spent on — a bare spinner wasted it.
+          body: AmbientBackground(
+            showWatermark: false,
+            child: Center(child: SplashOrbitLoader()),
           ),
         ),
       ),
@@ -127,24 +130,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                 ),
               ),
               GoRoute(
-                path: 'hierarchy',
-                pageBuilder: (context, state) => NoTransitionPage(
-                  key: state.pageKey,
-                  child: const HierarchyScreen(),
-                ),
-              ),
-              GoRoute(
                 path: 'masters',
                 pageBuilder: (context, state) => NoTransitionPage(
                   key: state.pageKey,
                   child: const MastersScreen(),
-                ),
-              ),
-              GoRoute(
-                path: 'smtp',
-                pageBuilder: (context, state) => NoTransitionPage(
-                  key: state.pageKey,
-                  child: const SmtpSettingsScreen(),
                 ),
               ),
               GoRoute(

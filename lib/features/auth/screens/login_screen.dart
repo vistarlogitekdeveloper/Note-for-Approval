@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../shared/widgets/gradient_button.dart';
+import '../../../shared/widgets/vistar_brand.dart';
 import '../providers/auth_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -271,24 +272,7 @@ class _LogoMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        gradient: AppColors.ribbon,
-        borderRadius: BorderRadius.circular(size * 0.25),
-      ),
-      child: Center(
-        child: Text(
-          'V',
-          style: GoogleFonts.bricolageGrotesque(
-            color: Colors.white,
-            fontSize: size * 0.6,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ),
-    );
+    return VistarBrandGlyph(size: size, radius: size * 0.25);
   }
 }
 
@@ -415,9 +399,9 @@ class _FormContent extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: AppColors.bad.withOpacity(0.1),
+                  color: AppColors.bad.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.bad.withOpacity(0.3)),
+                  border: Border.all(color: AppColors.bad.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
