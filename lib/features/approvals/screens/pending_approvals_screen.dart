@@ -32,15 +32,15 @@ class PendingApprovalsScreen extends ConsumerWidget {
                     Text(
                       'Pending Approvals',
                       style: GoogleFonts.bricolageGrotesque(
-                        color: AppColors.txt,
+                        color: context.c.txt,
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.5,
                       ),
                     ),
-                    const Text(
+                    Text(
                       'Notes awaiting your action',
-                      style: TextStyle(color: AppColors.txt3, fontSize: 14),
+                      style: TextStyle(color: context.c.txt3, fontSize: 14),
                     ),
                   ],
                 ),
@@ -77,7 +77,7 @@ class PendingApprovalsScreen extends ConsumerWidget {
               ),
               error: (e, _) => Center(
                 child: Text('Error: $e',
-                    style: const TextStyle(color: AppColors.bad)),
+                    style: TextStyle(color: context.c.bad)),
               ),
             ),
           ),
@@ -117,13 +117,13 @@ class _ApprovalCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: AppColors.surface3,
+                  color: context.c.surface3,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   note.noteNumber,
-                  style: const TextStyle(
-                    color: AppColors.txt3,
+                  style: TextStyle(
+                    color: context.c.txt3,
                     fontSize: 12,
                     fontFamily: 'monospace',
                   ),
@@ -136,15 +136,15 @@ class _ApprovalCard extends StatelessWidget {
               Text(
                 timeAgo(note.updatedAt),
                 style:
-                    const TextStyle(color: AppColors.txt3, fontSize: 12),
+                    TextStyle(color: context.c.txt3, fontSize: 12),
               ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
             note.purposeLabel,
-            style: const TextStyle(
-              color: AppColors.txt,
+            style: TextStyle(
+              color: context.c.txt,
               fontSize: 16,
               fontWeight: FontWeight.w700,
             ),
@@ -153,20 +153,20 @@ class _ApprovalCard extends StatelessWidget {
           Text(
             truncate(note.objectiveInDetail, 120),
             style:
-                const TextStyle(color: AppColors.txt2, fontSize: 13.5, height: 1.5),
+                TextStyle(color: context.c.txt2, fontSize: 13.5, height: 1.5),
           ),
           const SizedBox(height: 12),
-          const Divider(color: AppColors.line, height: 1),
+          Divider(color: context.c.line, height: 1),
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.person_outline,
-                  size: 14, color: AppColors.txt3),
+              Icon(Icons.person_outline,
+                  size: 14, color: context.c.txt3),
               const SizedBox(width: 6),
               Text(
                 note.initiatorName,
-                style: const TextStyle(
-                    color: AppColors.txt3, fontSize: 12.5),
+                style: TextStyle(
+                    color: context.c.txt3, fontSize: 12.5),
               ),
               const Spacer(),
               GhostButton(

@@ -82,15 +82,15 @@ class AuditScreen extends ConsumerWidget {
           Text(
             'System Audit Log',
             style: GoogleFonts.bricolageGrotesque(
-              color: AppColors.txt,
+              color: context.c.txt,
               fontSize: 28,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.5,
             ),
           ),
-          const Text(
+          Text(
             'Immutable, sequential log of all note submissions, approvals, rejections, and configurations',
-            style: TextStyle(color: AppColors.txt3, fontSize: 14),
+            style: TextStyle(color: context.c.txt3, fontSize: 14),
           ),
           const SizedBox(height: 24),
           Expanded(
@@ -106,7 +106,7 @@ class AuditScreen extends ConsumerWidget {
                 ),
               ),
               error: (e, _) => Center(
-                child: Text('Error: $e', style: const TextStyle(color: AppColors.bad)),
+                child: Text('Error: $e', style: TextStyle(color: context.c.bad)),
               ),
             ),
           ),
@@ -124,9 +124,9 @@ class _AuditTable extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: context.c.line),
         borderRadius: BorderRadius.circular(16),
-        color: AppColors.surface,
+        color: context.c.surface,
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
@@ -143,14 +143,14 @@ class _AuditTable extends StatelessWidget {
             },
             children: [
               TableRow(
-                decoration: const BoxDecoration(color: AppColors.surface2),
+                decoration: BoxDecoration(color: context.c.surface2),
                 children: ['Timestamp', 'Action', 'Note #', 'Actor', 'Details']
                     .map((h) => Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
                           child: Text(
                             h.toUpperCase(),
-                            style: const TextStyle(
-                              color: AppColors.txt3,
+                            style: TextStyle(
+                              color: context.c.txt3,
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
                               letterSpacing: 0.6,
@@ -159,7 +159,7 @@ class _AuditTable extends StatelessWidget {
                         ))
                     .toList(),
               ),
-              ...logs.map((log) => _buildRow(log)),
+              ...logs.map((log) => _buildRow(context, log)),
             ],
           ),
         ),
@@ -167,26 +167,26 @@ class _AuditTable extends StatelessWidget {
     );
   }
 
-  TableRow _buildRow(AuditEntry log) {
+  TableRow _buildRow(BuildContext context, AuditEntry log) {
     return TableRow(
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.line)),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: context.c.line)),
       ),
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
           child: Text(formatDateTime(log.timestamp),
-              style: const TextStyle(color: AppColors.txt2, fontSize: 13)),
+              style: TextStyle(color: context.c.txt2, fontSize: 13)),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-          child: _actionBadge(log.action),
+          child: _actionBadge(context, log.action),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
           child: Text(log.noteNumber,
-              style: const TextStyle(
-                color: AppColors.txt,
+              style: TextStyle(
+                color: context.c.txt,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
                 fontFamily: 'monospace',
@@ -198,28 +198,28 @@ class _AuditTable extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(log.actorName,
-                  style: const TextStyle(
-                      color: AppColors.txt, fontSize: 13.5, fontWeight: FontWeight.w600)),
-              Text(log.actorRole, style: const TextStyle(color: AppColors.txt3, fontSize: 11)),
+                  style: TextStyle(
+                      color: context.c.txt, fontSize: 13.5, fontWeight: FontWeight.w600)),
+              Text(log.actorRole, style: TextStyle(color: context.c.txt3, fontSize: 11)),
             ],
           ),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
           child: Text(log.details,
-              style: const TextStyle(color: AppColors.txt2, fontSize: 13, height: 1.4)),
+              style: TextStyle(color: context.c.txt2, fontSize: 13, height: 1.4)),
         ),
       ],
     );
   }
 
-  Widget _actionBadge(String action) {
+  Widget _actionBadge(BuildContext context, String action) {
     final (color, bg) = switch (action) {
-      'SUBMIT' => (AppColors.info, const Color(0x225BA8FF)),
-      'APPROVE' => (AppColors.ok, const Color(0x2234D399)),
-      'REJECT' => (AppColors.bad, const Color(0x22FB6F84)),
-      'SAVE_DRAFT' => (AppColors.txt3, AppColors.surface3),
-      _ => (AppColors.txt2, AppColors.surface2),
+      'SUBMIT' => (context.c.info, const Color(0x225BA8FF)),
+      'APPROVE' => (context.c.ok, const Color(0x2234D399)),
+      'REJECT' => (context.c.bad, const Color(0x22FB6F84)),
+      'SAVE_DRAFT' => (context.c.txt3, context.c.surface3),
+      _ => (context.c.txt2, context.c.surface2),
     };
 
     return Container(

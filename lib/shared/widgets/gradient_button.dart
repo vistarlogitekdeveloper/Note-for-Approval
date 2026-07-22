@@ -64,7 +64,7 @@ class _GradientButtonState extends State<GradientButton>
           padding: EdgeInsets.symmetric(horizontal: px),
           decoration: BoxDecoration(
             gradient: widget.onPressed == null
-                ? const LinearGradient(colors: [AppColors.surface3, AppColors.surface3])
+                ? LinearGradient(colors: [context.c.surface3, context.c.surface3])
                 : AppColors.ribbon,
             borderRadius: BorderRadius.circular(11),
             boxShadow: widget.onPressed == null
@@ -130,8 +130,8 @@ class GhostButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? AppColors.bad : AppColors.txt2;
-    final border = danger ? AppColors.bad.withValues(alpha: 0.4) : AppColors.line2;
+    final color = danger ? context.c.bad : context.c.txt2;
+    final border = danger ? context.c.bad.withValues(alpha: 0.4) : context.c.line2;
     final h = small ? 36.0 : 44.0;
     final fz = small ? 12.5 : 14.0;
 

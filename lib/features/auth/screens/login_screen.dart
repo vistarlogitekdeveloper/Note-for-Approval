@@ -67,7 +67,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final isMobile = size.width < 800;
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: context.c.bg,
       body: Stack(
         children: [
           // ── Ambient background ──────────────────────────────────────────
@@ -129,7 +129,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                           Text(
                             AppStrings.company,
                             style: GoogleFonts.bricolageGrotesque(
-                              color: AppColors.txt,
+                              color: context.c.txt,
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
                             ),
@@ -153,7 +153,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       Text(
                         'Approvals',
                         style: GoogleFonts.bricolageGrotesque(
-                          color: AppColors.txt,
+                          color: context.c.txt,
                           fontSize: 52,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -1.5,
@@ -163,8 +163,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       const SizedBox(height: 20),
                       Text(
                         'Replace paper-based note approvals with a\ndigital, multi-level workflow — tracked,\naudit-ready, and PDF-archived.',
-                        style: const TextStyle(
-                          color: AppColors.txt3,
+                        style: TextStyle(
+                          color: context.c.txt3,
                           fontSize: 15.5,
                           height: 1.7,
                         ),
@@ -192,7 +192,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         SizedBox(
           width: 480,
           child: Container(
-            color: AppColors.bg2,
+            color: context.c.bg2,
             child: Center(child: _FormContent(
               formKey: _formKey,
               emailCtrl: _emailCtrl,
@@ -224,7 +224,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 Text(
                   AppStrings.company,
                   style: GoogleFonts.bricolageGrotesque(
-                    color: AppColors.txt,
+                    color: context.c.txt,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                   ),
@@ -255,11 +255,11 @@ class _AmbientBg extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: RadialGradient(
           center: Alignment(-0.8, -0.6),
           radius: 1.4,
-          colors: [Color(0xFF1A0F30), AppColors.bg],
+          colors: [Color(0xFF1A0F30), context.c.bg],
         ),
       ),
     );
@@ -298,7 +298,7 @@ class _StatFigure extends StatelessWidget {
           ),
         ),
         Text(label,
-            style: const TextStyle(color: AppColors.txt3, fontSize: 12.5)),
+            style: TextStyle(color: context.c.txt3, fontSize: 12.5)),
       ],
     );
   }
@@ -338,7 +338,7 @@ class _FormContent extends StatelessWidget {
             Text(
               'Sign in',
               style: GoogleFonts.bricolageGrotesque(
-                color: AppColors.txt,
+                color: context.c.txt,
                 fontSize: 30,
                 fontWeight: FontWeight.w800,
                 letterSpacing: -0.5,
@@ -347,7 +347,7 @@ class _FormContent extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               'Note for Approval Portal — ${AppStrings.company}',
-              style: const TextStyle(color: AppColors.txt3, fontSize: 13.5),
+              style: TextStyle(color: context.c.txt3, fontSize: 13.5),
             ),
             const SizedBox(height: 32),
 
@@ -356,7 +356,7 @@ class _FormContent extends StatelessWidget {
               controller: emailCtrl,
               keyboardType: TextInputType.emailAddress,
               autofillHints: const [AutofillHints.email],
-              style: const TextStyle(color: AppColors.txt, fontSize: 14),
+              style: TextStyle(color: context.c.txt, fontSize: 14),
               decoration: const InputDecoration(
                 labelText: 'Email address',
                 prefixIcon: Icon(Icons.email_outlined),
@@ -374,7 +374,7 @@ class _FormContent extends StatelessWidget {
               controller: passCtrl,
               obscureText: obscure,
               autofillHints: const [AutofillHints.password],
-              style: const TextStyle(color: AppColors.txt, fontSize: 14),
+              style: TextStyle(color: context.c.txt, fontSize: 14),
               onFieldSubmitted: (_) => onSubmit(),
               decoration: InputDecoration(
                 labelText: 'Password',
@@ -399,18 +399,18 @@ class _FormContent extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: AppColors.bad.withValues(alpha: 0.1),
+                  color: context.c.bad.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.bad.withValues(alpha: 0.3)),
+                  border: Border.all(color: context.c.bad.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.error_outline, color: AppColors.bad, size: 16),
+                    Icon(Icons.error_outline, color: context.c.bad, size: 16),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         error!,
-                        style: const TextStyle(color: AppColors.bad, fontSize: 13),
+                        style: TextStyle(color: context.c.bad, fontSize: 13),
                       ),
                     ),
                   ],
@@ -428,12 +428,12 @@ class _FormContent extends StatelessWidget {
             ),
 
             const SizedBox(height: 32),
-            const Divider(color: AppColors.line),
+            Divider(color: context.c.line),
             const SizedBox(height: 16),
             Text(
               'Contact your administrator if you have trouble signing in.',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.txt3, fontSize: 12.5),
+              style: TextStyle(color: context.c.txt3, fontSize: 12.5),
             ),
           ],
         ),

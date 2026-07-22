@@ -46,7 +46,8 @@ class AdminRepository {
       'email': email,
       'role': role.name,
       'password': password,
-      if (role == UserRole.approver) 'hierarchy_level': hierarchyLevel,
+      // hierarchy_level is dormant under the two-role model — a note names its
+      // own approvers by id — so it is no longer sent.
     });
     return User.fromJson(res.asMap);
   }
@@ -67,8 +68,6 @@ class AdminRepository {
       if (email != null) 'email': email,
       if (role != null) 'role': role.name,
       if (password != null && password.isNotEmpty) 'password': password,
-      if (role == UserRole.approver && hierarchyLevel != null)
-        'hierarchy_level': hierarchyLevel,
       if (isActive != null) 'is_active': isActive,
     });
     return User.fromJson(res.asMap);

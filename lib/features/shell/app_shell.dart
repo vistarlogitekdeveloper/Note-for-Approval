@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/theme_provider.dart';
 import '../../core/constants/app_strings.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../shared/models/user.dart';
@@ -68,15 +69,15 @@ class _AppShellState extends ConsumerState<AppShell> {
     final role = user?.role;
 
     return Container(
-      color: AppColors.bg2,
+      color: context.c.bg2,
       child: Column(
         children: [
           // Brand row
           Container(
             height: 64,
             padding: EdgeInsets.symmetric(horizontal: collapsed ? 12 : 18),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: AppColors.line)),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: context.c.line)),
             ),
             child: Row(
               children: [
@@ -91,15 +92,15 @@ class _AppShellState extends ConsumerState<AppShell> {
                         Text(
                           AppStrings.appShortName,
                           style: GoogleFonts.bricolageGrotesque(
-                            color: AppColors.txt,
+                            color: context.c.txt,
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
                         Text(
                           AppStrings.company,
-                          style: const TextStyle(
-                            color: AppColors.txt3,
+                          style: TextStyle(
+                            color: context.c.txt3,
                             fontSize: 10.5,
                           ),
                         ),
@@ -144,8 +145,8 @@ class _AppShellState extends ConsumerState<AppShell> {
           // User block
           Container(
             padding: EdgeInsets.all(collapsed ? 8 : 14),
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: AppColors.line)),
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: context.c.line)),
             ),
             child: collapsed
                 ? _UserAvatar(user: user, small: true)
@@ -159,8 +160,8 @@ class _AppShellState extends ConsumerState<AppShell> {
                           children: [
                             Text(
                               user?.name ?? 'User',
-                              style: const TextStyle(
-                                color: AppColors.txt,
+                              style: TextStyle(
+                                color: context.c.txt,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -169,8 +170,8 @@ class _AppShellState extends ConsumerState<AppShell> {
                             ),
                             Text(
                               user?.role.label ?? '',
-                              style: const TextStyle(
-                                color: AppColors.txt3,
+                              style: TextStyle(
+                                color: context.c.txt3,
                                 fontSize: 11.5,
                               ),
                             ),
@@ -194,8 +195,8 @@ class _AppShellState extends ConsumerState<AppShell> {
             padding: const EdgeInsets.fromLTRB(18, 12, 18, 4),
             child: Text(
               label.toUpperCase(),
-              style: const TextStyle(
-                color: AppColors.txt3,
+              style: TextStyle(
+                color: context.c.txt3,
                 fontSize: 10.5,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.8,
@@ -272,7 +273,7 @@ class _NavItem extends ConsumerWidget {
                 Icon(
                   icon,
                   size: 19,
-                  color: isActive ? AppColors.pink : AppColors.txt3,
+                  color: isActive ? AppColors.pink : context.c.txt3,
                 ),
                 if (!collapsed) ...[
                   const SizedBox(width: 10),
@@ -280,7 +281,7 @@ class _NavItem extends ConsumerWidget {
                     child: Text(
                       label,
                       style: TextStyle(
-                        color: isActive ? AppColors.txt : AppColors.txt2,
+                        color: isActive ? context.c.txt : context.c.txt2,
                         fontSize: 13.5,
                         fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                       ),
@@ -356,16 +357,16 @@ class _Topbar extends ConsumerWidget {
     return Container(
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: const BoxDecoration(
-        color: AppColors.bg2,
-        border: Border(bottom: BorderSide(color: AppColors.line)),
+      decoration: BoxDecoration(
+        color: context.c.bg2,
+        border: Border(bottom: BorderSide(color: context.c.line)),
       ),
       child: Row(
         children: [
           IconButton(
             icon: Icon(
               collapsed ? Icons.menu_open_rounded : Icons.menu_rounded,
-              color: AppColors.txt2,
+              color: context.c.txt2,
             ),
             onPressed: onMenuTap,
           ),
@@ -375,17 +376,17 @@ class _Topbar extends ConsumerWidget {
             height: 38,
             width: 260,
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: context.c.surface,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.line),
+              border: Border.all(color: context.c.line),
             ),
-            child: const Row(
+            child: Row(
               children: [
                 SizedBox(width: 12),
-                Icon(Icons.search_rounded, color: AppColors.txt3, size: 18),
+                Icon(Icons.search_rounded, color: context.c.txt3, size: 18),
                 SizedBox(width: 8),
                 Text('Search notes…',
-                    style: TextStyle(color: AppColors.txt3, fontSize: 13.5)),
+                    style: TextStyle(color: context.c.txt3, fontSize: 13.5)),
               ],
             ),
           ),
@@ -395,7 +396,7 @@ class _Topbar extends ConsumerWidget {
           IconButton(
             icon: Stack(
               children: [
-                const Icon(Icons.notifications_outlined, color: AppColors.txt2),
+                Icon(Icons.notifications_outlined, color: context.c.txt2),
                 Positioned(
                   top: 0,
                   right: 0,
@@ -427,24 +428,24 @@ class _Topbar extends ConsumerWidget {
                   children: [
                     Text(
                       user?.name ?? 'User',
-                      style: const TextStyle(
-                        color: AppColors.txt,
+                      style: TextStyle(
+                        color: context.c.txt,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     Text(
                       user?.role.label ?? '',
-                      style: const TextStyle(
-                        color: AppColors.txt3,
+                      style: TextStyle(
+                        color: context.c.txt3,
                         fontSize: 11,
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(width: 4),
-                const Icon(Icons.keyboard_arrow_down_rounded,
-                    color: AppColors.txt3, size: 16),
+                Icon(Icons.keyboard_arrow_down_rounded,
+                    color: context.c.txt3, size: 16),
               ],
             ),
             itemBuilder: (_) => [
@@ -469,14 +470,33 @@ class _Topbar extends ConsumerWidget {
                 ),
               ),
               const PopupMenuDivider(),
+              // Theme toggle. Labelled by the target, not the current state —
+              // "Light mode" means "switch to light" — which is what a user
+              // reads a menu action as.
+              PopupMenuItem(
+                value: 'theme',
+                child: Row(
+                  children: [
+                    Icon(
+                      context.c.isDark
+                          ? Icons.light_mode_outlined
+                          : Icons.dark_mode_outlined,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(context.c.isDark ? 'Light mode' : 'Dark mode'),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
               PopupMenuItem(
                 value: 'logout',
                 child: Row(
                   children: [
-                    Icon(Icons.logout_rounded, size: 16, color: AppColors.bad),
+                    Icon(Icons.logout_rounded, size: 16, color: context.c.bad),
                     const SizedBox(width: 10),
                     Text('Sign out',
-                        style: TextStyle(color: AppColors.bad)),
+                        style: TextStyle(color: context.c.bad)),
                   ],
                 ),
               ),
@@ -484,6 +504,12 @@ class _Topbar extends ConsumerWidget {
             onSelected: (v) async {
               if (v == 'logout') {
                 await ref.read(authProvider.notifier).logout();
+              } else if (v == 'theme') {
+                // Resolve the *effective* brightness so toggling from "system"
+                // flips to the opposite of what is currently on screen.
+                ref
+                    .read(themeModeProvider.notifier)
+                    .toggle(Theme.of(context).brightness);
               }
             },
           ),

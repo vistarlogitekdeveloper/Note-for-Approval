@@ -35,13 +35,13 @@ class MastersScreen extends ConsumerWidget {
                 children: [
                   Text('Purpose Masters',
                       style: GoogleFonts.bricolageGrotesque(
-                        color: AppColors.txt,
+                        color: context.c.txt,
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.5,
                       )),
-                  const Text('Manage Purpose/Objective dropdown values',
-                      style: TextStyle(color: AppColors.txt3, fontSize: 14)),
+                  Text('Manage Purpose/Objective dropdown values',
+                      style: TextStyle(color: context.c.txt3, fontSize: 14)),
                 ],
               ),
               const Spacer(),
@@ -65,7 +65,7 @@ class MastersScreen extends ConsumerWidget {
               ),
               error: (e, _) => Center(
                 child: Text('Error: $e',
-                    style: const TextStyle(color: AppColors.bad)),
+                    style: TextStyle(color: context.c.bad)),
               ),
             ),
           ),
@@ -167,9 +167,9 @@ class _PurposeDialogState extends ConsumerState<_PurposeDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: context.c.surface,
       title: Text(_isEdit ? 'Edit Purpose' : 'Add Purpose',
-          style: const TextStyle(color: AppColors.txt, fontSize: 17)),
+          style: TextStyle(color: context.c.txt, fontSize: 17)),
       content: SizedBox(
         width: 380,
         child: Column(
@@ -180,14 +180,14 @@ class _PurposeDialogState extends ConsumerState<_PurposeDialog> {
               controller: _nameCtrl,
               autofocus: true,
               enabled: !_saving,
-              style: const TextStyle(color: AppColors.txt),
+              style: TextStyle(color: context.c.txt),
               decoration: const InputDecoration(labelText: 'Purpose Name *'),
               onSubmitted: (_) => _saving ? null : _save(),
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
               Text(_error!,
-                  style: const TextStyle(color: AppColors.bad, fontSize: 12.5)),
+                  style: TextStyle(color: context.c.bad, fontSize: 12.5)),
             ],
           ],
         ),
@@ -241,9 +241,9 @@ class _PurposesList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: context.c.line),
         borderRadius: BorderRadius.circular(16),
-        color: AppColors.surface,
+        color: context.c.surface,
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
@@ -251,7 +251,7 @@ class _PurposesList extends ConsumerWidget {
           children: [
             // Header
             Container(
-              color: AppColors.surface2,
+              color: context.c.surface2,
               child: const Row(
                 children: [
                   Expanded(child: _TH('Purpose Name')),
@@ -266,8 +266,8 @@ class _PurposesList extends ConsumerWidget {
                 itemBuilder: (ctx, i) {
                   final item = items[i];
                   return Container(
-                    decoration: const BoxDecoration(
-                      border: Border(top: BorderSide(color: AppColors.line)),
+                    decoration: BoxDecoration(
+                      border: Border(top: BorderSide(color: context.c.line)),
                     ),
                     child: Row(
                       children: [
@@ -276,8 +276,8 @@ class _PurposesList extends ConsumerWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 14),
                             child: Text(item.name,
-                                style: const TextStyle(
-                                    color: AppColors.txt, fontSize: 14)),
+                                style: TextStyle(
+                                    color: context.c.txt, fontSize: 14)),
                           ),
                         ),
                         SizedBox(
@@ -295,8 +295,8 @@ class _PurposesList extends ConsumerWidget {
                           child: Center(
                             child: IconButton(
                               tooltip: 'Edit',
-                              icon: const Icon(Icons.edit_outlined,
-                                  size: 18, color: AppColors.txt3),
+                              icon: Icon(Icons.edit_outlined,
+                                  size: 18, color: context.c.txt3),
                               onPressed: () =>
                                   _openPurposeDialog(context, ref, item),
                             ),
@@ -325,8 +325,8 @@ class _TH extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(
-          color: AppColors.txt3,
+        style: TextStyle(
+          color: context.c.txt3,
           fontSize: 11,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.6,

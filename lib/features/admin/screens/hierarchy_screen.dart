@@ -39,13 +39,13 @@ class HierarchyScreen extends ConsumerWidget {
                 children: [
                   Text('Approval Hierarchy',
                       style: GoogleFonts.bricolageGrotesque(
-                        color: AppColors.txt,
+                        color: context.c.txt,
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.5,
                       )),
-                  const Text('Define and reorder the sequential approval levels',
-                      style: TextStyle(color: AppColors.txt3, fontSize: 14)),
+                  Text('Define and reorder the sequential approval levels',
+                      style: TextStyle(color: context.c.txt3, fontSize: 14)),
                 ],
               ),
               const Spacer(),
@@ -63,18 +63,18 @@ class HierarchyScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(14),
             margin: const EdgeInsets.only(bottom: 20),
             decoration: BoxDecoration(
-              color: AppColors.info.withValues(alpha: 0.08),
+              color: context.c.info.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.info.withValues(alpha: 0.2)),
+              border: Border.all(color: context.c.info.withValues(alpha: 0.2)),
             ),
-            child: const Row(
+            child: Row(
               children: [
-                Icon(Icons.info_outline, color: AppColors.info, size: 18),
+                Icon(Icons.info_outline, color: context.c.info, size: 18),
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     'Notes flow sequentially through these levels. Drag to reorder. Minimum 8 levels required.',
-                    style: TextStyle(color: AppColors.txt2, fontSize: 13.5),
+                    style: TextStyle(color: context.c.txt2, fontSize: 13.5),
                   ),
                 ),
               ],
@@ -93,7 +93,7 @@ class HierarchyScreen extends ConsumerWidget {
               ),
               error: (e, _) => Center(
                 child: Text('Error: $e',
-                    style: const TextStyle(color: AppColors.bad)),
+                    style: TextStyle(color: context.c.bad)),
               ),
             ),
           ),
@@ -117,13 +117,13 @@ class HierarchyScreen extends ConsumerWidget {
             children: [
               TextField(
                 controller: nameCtrl,
-                style: const TextStyle(color: AppColors.txt),
+                style: TextStyle(color: context.c.txt),
                 decoration: const InputDecoration(labelText: 'Role Name *'),
               ),
               const SizedBox(height: 14),
               TextField(
                 controller: descCtrl,
-                style: const TextStyle(color: AppColors.txt),
+                style: TextStyle(color: context.c.txt),
                 maxLines: 2,
                 decoration: const InputDecoration(labelText: 'Description'),
               ),
@@ -225,8 +225,8 @@ class _HierarchyCard extends StatelessWidget {
               children: [
                 Text(
                   role.name,
-                  style: const TextStyle(
-                    color: AppColors.txt,
+                  style: TextStyle(
+                    color: context.c.txt,
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                   ),
@@ -234,8 +234,8 @@ class _HierarchyCard extends StatelessWidget {
                 if (role.description != null)
                   Text(
                     role.description!,
-                    style: const TextStyle(
-                        color: AppColors.txt3, fontSize: 13),
+                    style: TextStyle(
+                        color: context.c.txt3, fontSize: 13),
                   ),
               ],
             ),
@@ -244,14 +244,14 @@ class _HierarchyCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: role.isActive
-                  ? AppColors.ok.withValues(alpha: 0.1)
-                  : AppColors.surface3,
+                  ? context.c.ok.withValues(alpha: 0.1)
+                  : context.c.surface3,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               role.isActive ? 'Active' : 'Inactive',
               style: TextStyle(
-                color: role.isActive ? AppColors.ok : AppColors.txt3,
+                color: role.isActive ? context.c.ok : context.c.txt3,
                 fontSize: 11.5,
                 fontWeight: FontWeight.w700,
               ),
@@ -259,15 +259,15 @@ class _HierarchyCard extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           IconButton(
-            icon: const Icon(Icons.edit_outlined,
-                color: AppColors.txt3, size: 18),
+            icon: Icon(Icons.edit_outlined,
+                color: context.c.txt3, size: 18),
             onPressed: () {},
           ),
           ReorderableDragStartListener(
             index: dragIndex,
-            child: const Icon(
+            child: Icon(
               Icons.drag_handle_rounded,
-              color: AppColors.txt3,
+              color: context.c.txt3,
               size: 22,
             ),
           ),

@@ -170,4 +170,17 @@ class NoteFormNotifier extends StateNotifier<NoteFormState> {
       return false;
     }
   }
+
+  /// Send the note back to its creator to revise the hierarchy and resubmit.
+  Future<bool> reassign(String noteId, String remark) async {
+    state = state.copyWith(loading: true, error: null);
+    try {
+      await _repo.reassignNote(noteId, remark);
+      state = state.copyWith(loading: false, success: 'Note sent back for revision');
+      return true;
+    } catch (e) {
+      state = state.copyWith(loading: false, error: e.toString());
+      return false;
+    }
+  }
 }

@@ -39,13 +39,13 @@ class MyNotesScreen extends ConsumerWidget {
                 children: [
                   Text('My Notes',
                       style: GoogleFonts.bricolageGrotesque(
-                        color: AppColors.txt,
+                        color: context.c.txt,
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.5,
                       )),
-                  const Text('All notes you have raised',
-                      style: TextStyle(color: AppColors.txt3, fontSize: 14)),
+                  Text('All notes you have raised',
+                      style: TextStyle(color: context.c.txt3, fontSize: 14)),
                 ],
               ),
               const Spacer(),
@@ -77,16 +77,16 @@ class MyNotesScreen extends ConsumerWidget {
                       decoration: BoxDecoration(
                         color: isActive
                             ? AppColors.pink.withValues(alpha: 0.15)
-                            : AppColors.surface2,
+                            : context.c.surface2,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: isActive ? AppColors.pink : AppColors.line,
+                          color: isActive ? AppColors.pink : context.c.line,
                         ),
                       ),
                       child: Text(
                         label,
                         style: TextStyle(
-                          color: isActive ? AppColors.pink : AppColors.txt2,
+                          color: isActive ? AppColors.pink : context.c.txt2,
                           fontSize: 13,
                           fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                         ),
@@ -117,7 +117,7 @@ class MyNotesScreen extends ConsumerWidget {
               ),
               error: (e, _) =>
                   Center(child: Text('Error: $e',
-                      style: const TextStyle(color: AppColors.bad))),
+                      style: TextStyle(color: context.c.bad))),
             ),
           ),
         ],
@@ -134,9 +134,9 @@ class _NotesTable extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: context.c.line),
         borderRadius: BorderRadius.circular(16),
-        color: AppColors.surface,
+        color: context.c.surface,
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
@@ -159,14 +159,14 @@ class _NotesTable extends StatelessWidget {
             children: [
               // Header
               TableRow(
-                decoration: const BoxDecoration(color: AppColors.surface2),
+                decoration: BoxDecoration(color: context.c.surface2),
                 children: [
-                  _th('Note #'),
-                  _th('Purpose'),
-                  _th('Objective'),
-                  _th('Status'),
-                  _th('Date'),
-                  _th(''),
+                  _th(context, 'Note #'),
+                  _th(context, 'Purpose'),
+                  _th(context, 'Objective'),
+                  _th(context, 'Status'),
+                  _th(context, 'Date'),
+                  _th(context, ''),
                 ],
               ),
               ...notes.map((n) => _noteRow(context, n)),
@@ -179,31 +179,31 @@ class _NotesTable extends StatelessWidget {
 
   TableRow _noteRow(BuildContext context, Note n) {
     return TableRow(
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.line)),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: context.c.line)),
       ),
       children: [
         _td(Text(n.noteNumber,
-            style: const TextStyle(
-              color: AppColors.txt3,
+            style: TextStyle(
+              color: context.c.txt3,
               fontSize: 12,
               fontFamily: 'monospace',
             ))),
         _td(Text(n.purposeLabel,
-            style: const TextStyle(
-              color: AppColors.txt,
+            style: TextStyle(
+              color: context.c.txt,
               fontSize: 13.5,
               fontWeight: FontWeight.w600,
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis)),
         _td(Text(truncate(n.objectiveInDetail, 80),
-            style: const TextStyle(color: AppColors.txt2, fontSize: 13),
+            style: TextStyle(color: context.c.txt2, fontSize: 13),
             maxLines: 2,
             overflow: TextOverflow.ellipsis)),
         _td(StatusPill(n.status)),
         _td(Text(formatDate(n.createdAt),
-            style: const TextStyle(color: AppColors.txt3, fontSize: 12.5))),
+            style: TextStyle(color: context.c.txt3, fontSize: 12.5))),
         // A draft is still being written and a returned note is waiting to be
         // revised — both open the form. Anything else is read-only.
         _td(
@@ -224,12 +224,12 @@ class _NotesTable extends StatelessWidget {
     );
   }
 
-  Widget _th(String label) => Padding(
+  Widget _th(BuildContext context, String label) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
         child: Text(
           label.toUpperCase(),
-          style: const TextStyle(
-            color: AppColors.txt3,
+          style: TextStyle(
+            color: context.c.txt3,
             fontSize: 11,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.6,

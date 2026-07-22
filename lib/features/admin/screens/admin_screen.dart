@@ -8,29 +8,31 @@ import '../../../shared/widgets/common_widgets.dart';
 class AdminScreen extends ConsumerWidget {
   const AdminScreen({super.key});
 
-  static const _tiles = [
-    _AdminTile(
-      icon: Icons.people_alt_outlined,
-      title: 'Users',
-      subtitle: 'Manage users and role assignments',
-      path: '/admin/users',
-      color: AppColors.info,
-    ),
-    _AdminTile(
-      icon: Icons.list_alt_outlined,
-      title: 'Purpose Masters',
-      subtitle: 'Manage Purpose/Objective dropdown values',
-      path: '/admin/masters',
-      color: AppColors.orange,
-    ),
-    _AdminTile(
-      icon: Icons.history_outlined,
-      title: 'Audit Log',
-      subtitle: 'Immutable record of all system actions',
-      path: '/admin/audit',
-      color: AppColors.warn,
-    ),
-  ];
+  // Not a static const any more: two tile accents are theme-aware, which needs
+  // a BuildContext. Brand orange stays constant.
+  List<_AdminTile> _tiles(BuildContext context) => [
+        _AdminTile(
+          icon: Icons.people_alt_outlined,
+          title: 'Users',
+          subtitle: 'Manage users and role assignments',
+          path: '/admin/users',
+          color: context.c.info,
+        ),
+        const _AdminTile(
+          icon: Icons.list_alt_outlined,
+          title: 'Purpose Masters',
+          subtitle: 'Manage Purpose/Objective dropdown values',
+          path: '/admin/masters',
+          color: AppColors.orange,
+        ),
+        _AdminTile(
+          icon: Icons.history_outlined,
+          title: 'Audit Log',
+          subtitle: 'Immutable record of all system actions',
+          path: '/admin/audit',
+          color: context.c.warn,
+        ),
+      ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -42,15 +44,15 @@ class AdminScreen extends ConsumerWidget {
           Text(
             'Administration',
             style: GoogleFonts.bricolageGrotesque(
-              color: AppColors.txt,
+              color: context.c.txt,
               fontSize: 28,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.5,
             ),
           ),
-          const Text(
+          Text(
             'Manage the system configuration, users, and masters',
-            style: TextStyle(color: AppColors.txt3, fontSize: 14),
+            style: TextStyle(color: context.c.txt3, fontSize: 14),
           ),
           const SizedBox(height: 28),
           Expanded(
@@ -61,7 +63,7 @@ class AdminScreen extends ConsumerWidget {
                 crossAxisSpacing: 16,
                 mainAxisSpacing: 16,
                 childAspectRatio: 2.2,
-                children: _tiles
+                children: _tiles(context)
                     .map((t) => _AdminCard(tile: t))
                     .toList(),
               );
@@ -115,8 +117,8 @@ class _AdminCard extends StatelessWidget {
               children: [
                 Text(
                   tile.title,
-                  style: const TextStyle(
-                    color: AppColors.txt,
+                  style: TextStyle(
+                    color: context.c.txt,
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                   ),
@@ -124,14 +126,14 @@ class _AdminCard extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   tile.subtitle,
-                  style: const TextStyle(
-                      color: AppColors.txt3, fontSize: 12.5),
+                  style: TextStyle(
+                      color: context.c.txt3, fontSize: 12.5),
                 ),
               ],
             ),
           ),
-          const Icon(Icons.arrow_forward_ios_rounded,
-              size: 14, color: AppColors.txt3),
+          Icon(Icons.arrow_forward_ios_rounded,
+              size: 14, color: context.c.txt3),
         ],
       ),
     );

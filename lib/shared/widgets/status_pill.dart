@@ -9,10 +9,11 @@ class StatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (color, bg, label) = switch (status) {
-      NoteStatus.draft => (AppColors.txt3, AppColors.surface3, 'Draft'),
-      NoteStatus.pendingApproval => (AppColors.info, const Color(0x225BA8FF), 'Pending'),
-      NoteStatus.approved => (AppColors.ok, const Color(0x2234D399), 'Approved'),
-      NoteStatus.rejected => (AppColors.bad, const Color(0x22FB6F84), 'Rejected'),
+      NoteStatus.draft => (context.c.txt3, context.c.surface3, 'Draft'),
+      NoteStatus.pendingApproval => (context.c.info, const Color(0x225BA8FF), 'Pending'),
+      NoteStatus.approved => (context.c.ok, const Color(0x2234D399), 'Approved'),
+      NoteStatus.rejected => (context.c.bad, const Color(0x22FB6F84), 'Rejected'),
+      NoteStatus.returned => (context.c.warn, const Color(0x22F5A623), 'Returned'),
     };
 
     return Container(
@@ -53,14 +54,14 @@ class LevelPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.surface3,
+        color: context.c.surface3,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: context.c.line),
       ),
       child: Text(
         'Level $current / $total',
-        style: const TextStyle(
-          color: AppColors.txt2,
+        style: TextStyle(
+          color: context.c.txt2,
           fontSize: 11.5,
           fontWeight: FontWeight.w600,
         ),

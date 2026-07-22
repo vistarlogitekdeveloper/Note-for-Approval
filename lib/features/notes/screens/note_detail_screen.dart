@@ -30,7 +30,7 @@ class NoteDetailScreen extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(
         child: Text('Error loading note: $e',
-            style: const TextStyle(color: AppColors.bad)),
+            style: TextStyle(color: context.c.bad)),
       ),
     );
   }
@@ -46,41 +46,21 @@ class _NoteDetail extends ConsumerWidget {
   /// Mirrors `canActAt()` in the API's note.service.js, branch for branch — a
   /// button the server would refuse is as wrong as a missing one.
   ///
-  ///  * Named on the note's own chain -> only at the level(s) naming you. A
-  ///    super admin placed last waits for the levels ahead of them, which is
-  ///    the whole point of ordering a chain.
-  ///  * Not named on it -> admins keep their override, so a note parked at a
-  ///    level nobody occupies can still be unstuck.
-  ///  * No chain at all -> the global route: admins override, otherwise the
-  ///    holder of the matching hierarchy level.
+  /// STRICT: only the user the note NAMES at its CURRENT level may act. There is
+  /// no admin override — an admin who is not named at the current level (whether
+  /// off the chain entirely, or on it but at another step) sees no action
+  /// buttons, exactly like anyone else. The server enforces the same rule.
   bool get _canApprove {
     final user = currentUser;
     if (user == null || note.status != NoteStatus.pendingApproval) return false;
 
     if (note.hasCustomChain) {
-      final mine = note.approverChain.where((a) => a.userId == user.id);
-      if (mine.isNotEmpty) {
-        return mine.any((a) => a.level == note.currentLevel);
-      }
-      return user.role.canAdmin;
-    }
-
-    if (user.role.canAdmin) return true;
-    return user.role.canApprove && user.hierarchyLevel == note.currentLevel;
-  }
-
-  /// True when the user may act only because they are an admin, not because
-  /// this level is theirs. Worth saying out loud: an override on someone
-  /// else's level is a different act from taking your own turn.
-  bool get _isOverride {
-    final user = currentUser;
-    if (user == null || !_canApprove) return false;
-
-    if (note.hasCustomChain) {
-      return !note.approverChain
+      return note.approverChain
           .any((a) => a.level == note.currentLevel && a.userId == user.id);
     }
-    return user.hierarchyLevel != note.currentLevel;
+
+    // Dormant global route — likewise strict: the holder of this level, no override.
+    return user.hierarchyLevel == note.currentLevel;
   }
 
   /// The server allows a PATCH only from the note's own initiator, and only
@@ -107,20 +87,20 @@ class _NoteDetail extends ConsumerWidget {
                       children: [
                         GestureDetector(
                           onTap: () => context.go('/notes'),
-                          child: const Text('My Notes',
-                              style: TextStyle(color: AppColors.txt3, fontSize: 13.5)),
+                          child: Text('My Notes',
+                              style: TextStyle(color: context.c.txt3, fontSize: 13.5)),
                         ),
-                        const Text(' / ', style: TextStyle(color: AppColors.txt3)),
+                        Text(' / ', style: TextStyle(color: context.c.txt3)),
                         Text(note.noteNumber,
-                            style: const TextStyle(
-                                color: AppColors.txt2, fontSize: 13.5)),
+                            style: TextStyle(
+                                color: context.c.txt2, fontSize: 13.5)),
                       ],
                     ),
                     const SizedBox(height: 6),
                     Text(
                       note.purposeLabel,
                       style: GoogleFonts.bricolageGrotesque(
-                        color: AppColors.txt,
+                        color: context.c.txt,
                         fontSize: 26,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.4,
@@ -161,54 +141,32 @@ class _NoteDetail extends ConsumerWidget {
                     if (_canEdit) const SizedBox(width: 12),
                     _DownloadPdfButton(note: note),
                   ],
+                  // Approve / Reject / Send back — shown ONLY to the user named
+                  // at the note's current level (see _canApprove). No admin
+                  // override, so there is no "acting on someone else's level"
+                  // case left to label.
                   if (_canApprove) ...[
-                    // An admin acting on a level that isn't theirs is doing
-                    // something different from taking their turn — label it,
-                    // rather than letting it look like the normal flow.
-                    if (_isOverride) ...[
-                      const SizedBox(width: 12),
-                      Tooltip(
-                        message: 'This level is not yours. Acting here uses '
-                            'your admin override.',
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.warn.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                                color: AppColors.warn.withValues(alpha: 0.4)),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.shield_outlined,
-                                  size: 13, color: AppColors.warn),
-                              SizedBox(width: 5),
-                              Text('Admin override',
-                                  style: TextStyle(
-                                      color: AppColors.warn,
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w700)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
+                    const SizedBox(width: 12),
+                    GhostButton(
+                      label: 'Send back',
+                      icon: Icons.reply_rounded,
+                      onPressed: () => _showRemarkDialog(
+                        context, ref, decision: _Decision.reassign),
+                    ),
                     const SizedBox(width: 12),
                     GhostButton(
                       label: 'Reject',
                       icon: Icons.close_rounded,
                       danger: true,
                       onPressed: () => _showRemarkDialog(
-                        context, ref, isApprove: false),
+                        context, ref, decision: _Decision.reject),
                     ),
                     const SizedBox(width: 12),
                     GradientButton(
                       label: 'Approve',
                       icon: Icons.check_rounded,
                       onPressed: () => _showRemarkDialog(
-                        context, ref, isApprove: true),
+                        context, ref, decision: _Decision.approve),
                     ),
                   ],
                 ],
@@ -270,13 +228,13 @@ class _NoteDetail extends ConsumerWidget {
   }
 
   Future<void> _showRemarkDialog(BuildContext context, WidgetRef ref,
-      {required bool isApprove}) async {
+      {required _Decision decision}) async {
     final outcome = await showDialog<DecisionOutcome>(
       context: context,
       // A decision is irreversible; a stray tap outside must not be how it
       // gets abandoned mid-typing.
       barrierDismissible: false,
-      builder: (_) => _RemarkDialog(note: note, isApprove: isApprove),
+      builder: (_) => _RemarkDialog(note: note, decision: decision),
     );
     if (outcome == null || !context.mounted) return;
 
@@ -288,16 +246,15 @@ class _NoteDetail extends ConsumerWidget {
     ref.invalidate(recentNotesProvider);
     ref.invalidate(dashboardStatsProvider);
 
-    final verb = isApprove ? 'approved' : 'rejected';
     // Mail and PDF run after the decision commits and are best-effort, so the
     // decision can succeed while notification does not. Say which happened
     // rather than implying everything worked.
-    final buffer = StringBuffer('Note $verb.');
+    final buffer = StringBuffer('${decision.pastMessage}.');
     if (!outcome.emailSent) {
       buffer.write(' Email was not sent');
       buffer.write(outcome.emailIssue == null ? '.' : ' (${outcome.emailIssue}).');
     }
-    if (isApprove && outcome.pdfError != null) {
+    if (decision == _Decision.approve && outcome.pdfError != null) {
       buffer.write(' PDF could not be generated.');
     }
 
@@ -307,6 +264,55 @@ class _NoteDetail extends ConsumerWidget {
       AppFeedback.info(context, buffer.toString());
     }
   }
+}
+
+/// The three things an approver can do to a note awaiting them. `wire` is not
+/// sent (each has its own endpoint) — it exists so the mapping to the API verb
+/// is stated once, next to everything else that differs per decision.
+enum _Decision {
+  approve(
+    title: 'Approve Note',
+    actionLabel: 'Approve',
+    busyLabel: 'Approving…',
+    pastMessage: 'Note approved',
+    hint: 'Enter your approval remark…',
+    remarkRequired: false,
+  ),
+  reject(
+    title: 'Reject Note',
+    actionLabel: 'Reject',
+    busyLabel: 'Rejecting…',
+    pastMessage: 'Note rejected',
+    hint: 'Enter rejection reason…',
+    remarkRequired: true,
+  ),
+  reassign(
+    title: 'Send Back for Revision',
+    actionLabel: 'Send back',
+    busyLabel: 'Sending…',
+    pastMessage: 'Note sent back for revision',
+    hint: 'What should the creator change before resubmitting?',
+    remarkRequired: true,
+  );
+
+  const _Decision({
+    required this.title,
+    required this.actionLabel,
+    required this.busyLabel,
+    required this.pastMessage,
+    required this.hint,
+    required this.remarkRequired,
+  });
+
+  final String title;
+  final String actionLabel;
+  final String busyLabel;
+  final String pastMessage;
+  final String hint;
+
+  /// Approve may be confirmed with no remark (the server auto-fills one);
+  /// reject and reassign both need a reason the creator will read.
+  final bool remarkRequired;
 }
 
 /// Fetches the approved note's PDF and saves it.
@@ -362,9 +368,9 @@ class _DownloadPdfButtonState extends ConsumerState<_DownloadPdfButton> {
 /// cannot fire it twice), and a failure is reported INSIDE the dialog instead
 /// of vanishing behind a dialog that already closed.
 class _RemarkDialog extends ConsumerStatefulWidget {
-  const _RemarkDialog({required this.note, required this.isApprove});
+  const _RemarkDialog({required this.note, required this.decision});
   final Note note;
-  final bool isApprove;
+  final _Decision decision;
 
   @override
   ConsumerState<_RemarkDialog> createState() => _RemarkDialogState();
@@ -382,10 +388,11 @@ class _RemarkDialogState extends ConsumerState<_RemarkDialog> {
   }
 
   Future<void> _submit() async {
+    final decision = widget.decision;
     final remark = _ctrl.text.trim();
-    // The server rejects a blank remark with REMARK_REQUIRED; previously the
-    // button just did nothing, which reads as a broken button.
-    if (remark.isEmpty) {
+    // Approve may go through with no remark (the server records one); reject and
+    // reassign both need a reason the creator will read.
+    if (decision.remarkRequired && remark.isEmpty) {
       setState(() => _error = 'A remark is required.');
       return;
     }
@@ -397,9 +404,11 @@ class _RemarkDialogState extends ConsumerState<_RemarkDialog> {
 
     final repo = ref.read(notesRepositoryProvider);
     try {
-      final outcome = widget.isApprove
-          ? await repo.approveNote(widget.note.id, remark)
-          : await repo.rejectNote(widget.note.id, remark);
+      final outcome = switch (decision) {
+        _Decision.approve => await repo.approveNote(widget.note.id, remark),
+        _Decision.reject => await repo.rejectNote(widget.note.id, remark),
+        _Decision.reassign => await repo.reassignNote(widget.note.id, remark),
+      };
       if (!mounted) return;
       Navigator.of(context).pop(outcome);
     } catch (e) {
@@ -411,13 +420,24 @@ class _RemarkDialogState extends ConsumerState<_RemarkDialog> {
     }
   }
 
+  String get _lead => switch (widget.decision) {
+        _Decision.approve => widget.note.currentLevel >= widget.note.totalLevels
+            ? 'This is the final level — the note will be fully approved.'
+            : 'This note will be forwarded to the next level.',
+        _Decision.reject =>
+          'This ends the approval workflow. The note is rejected and cannot be edited or resubmitted.',
+        _Decision.reassign =>
+          'This sends the note back to its creator to revise the hierarchy. Already-approved levels stay approved — when resubmitted it resumes from level ${widget.note.currentLevel}, not the start.',
+      };
+
   @override
   Widget build(BuildContext context) {
-    final isApprove = widget.isApprove;
+    final decision = widget.decision;
+    final required = decision.remarkRequired;
     return AlertDialog(
-      backgroundColor: AppColors.surface,
-      title: Text(isApprove ? 'Approve Note' : 'Reject Note',
-          style: const TextStyle(color: AppColors.txt, fontSize: 17)),
+      backgroundColor: context.c.surface,
+      title: Text(decision.title,
+          style: TextStyle(color: context.c.txt, fontSize: 17)),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -425,12 +445,8 @@ class _RemarkDialogState extends ConsumerState<_RemarkDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              isApprove
-                  ? (widget.note.currentLevel >= widget.note.totalLevels
-                      ? 'This is the final level — the note will be fully approved.'
-                      : 'This note will be forwarded to the next level.')
-                  : 'This will stop the approval workflow. It cannot be undone.',
-              style: const TextStyle(color: AppColors.txt2, fontSize: 13.5),
+              _lead,
+              style: TextStyle(color: context.c.txt2, fontSize: 13.5),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -438,12 +454,10 @@ class _RemarkDialogState extends ConsumerState<_RemarkDialog> {
               maxLines: 4,
               autofocus: true,
               enabled: !_busy,
-              style: const TextStyle(color: AppColors.txt),
+              style: TextStyle(color: context.c.txt),
               decoration: InputDecoration(
-                labelText: 'Remark *',
-                hintText: isApprove
-                    ? 'Enter your approval remark…'
-                    : 'Enter rejection reason…',
+                labelText: required ? 'Remark *' : 'Remark (optional)',
+                hintText: decision.hint,
               ),
             ),
             if (_error != null) ...[
@@ -451,12 +465,12 @@ class _RemarkDialogState extends ConsumerState<_RemarkDialog> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.error_outline, size: 15, color: AppColors.bad),
+                  Icon(Icons.error_outline, size: 15, color: context.c.bad),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(_error!,
-                        style: const TextStyle(
-                            color: AppColors.bad, fontSize: 12.5)),
+                        style: TextStyle(
+                            color: context.c.bad, fontSize: 12.5)),
                   ),
                 ],
               ),
@@ -469,16 +483,16 @@ class _RemarkDialogState extends ConsumerState<_RemarkDialog> {
           onPressed: _busy ? null : () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        isApprove
+        decision == _Decision.approve
             ? GradientButton(
-                label: _busy ? 'Approving…' : 'Approve',
+                label: _busy ? decision.busyLabel : decision.actionLabel,
                 small: true,
                 loading: _busy,
                 onPressed: _busy ? null : _submit,
               )
             : GhostButton(
-                label: _busy ? 'Rejecting…' : 'Reject',
-                danger: true,
+                label: _busy ? decision.busyLabel : decision.actionLabel,
+                danger: decision == _Decision.reject,
                 onPressed: _busy ? null : _submit,
               ),
       ],
@@ -504,7 +518,7 @@ class _NoteInfoCard extends StatelessWidget {
           _InfoRow('Email', note.initiatorEmail),
           _InfoRow('Date Submitted', formatDateTime(note.createdAt)),
           _InfoRow('Purpose / Objective', note.purposeLabel),
-          const Divider(height: 24, color: AppColors.line),
+          Divider(height: 24, color: context.c.line),
           _InfoRow('Objective in Detail', note.objectiveInDetail,
               multiLine: true),
           const SizedBox(height: 12),
@@ -534,15 +548,15 @@ class _InfoRow extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(label,
-                style: const TextStyle(
-                    color: AppColors.txt3,
+                style: TextStyle(
+                    color: context.c.txt3,
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.4)),
             const SizedBox(height: 4),
             Text(value,
-                style: const TextStyle(
-                    color: AppColors.txt, fontSize: 14, height: 1.6)),
+                style: TextStyle(
+                    color: context.c.txt, fontSize: 14, height: 1.6)),
           ],
         ),
       );
@@ -555,13 +569,13 @@ class _InfoRow extends StatelessWidget {
           SizedBox(
             width: 160,
             child: Text(label,
-                style: const TextStyle(
-                    color: AppColors.txt3, fontSize: 13)),
+                style: TextStyle(
+                    color: context.c.txt3, fontSize: 13)),
           ),
           Expanded(
             child: Text(value,
-                style: const TextStyle(
-                    color: AppColors.txt,
+                style: TextStyle(
+                    color: context.c.txt,
                     fontSize: 13.5,
                     fontWeight: FontWeight.w600)),
           ),
@@ -617,8 +631,8 @@ class _AttachmentsCardState extends ConsumerState<_AttachmentsCard> {
           const SectionHeader('Attachments'),
           const SizedBox(height: 16),
           if (attachments.isEmpty)
-            const Text('No attachments',
-                style: TextStyle(color: AppColors.txt3, fontSize: 13.5))
+            Text('No attachments',
+                style: TextStyle(color: context.c.txt3, fontSize: 13.5))
           else
             Column(
               children: attachments.map((a) {
@@ -634,26 +648,26 @@ class _AttachmentsCardState extends ConsumerState<_AttachmentsCard> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 10),
                         decoration: BoxDecoration(
-                          color: AppColors.surface2,
+                          color: context.c.surface2,
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.line),
+                          border: Border.all(color: context.c.line),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.attach_file_rounded,
-                                size: 18, color: AppColors.txt3),
+                            Icon(Icons.attach_file_rounded,
+                                size: 18, color: context.c.txt3),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(a.fileName,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      color: AppColors.txt2, fontSize: 13.5)),
+                                  style: TextStyle(
+                                      color: context.c.txt2, fontSize: 13.5)),
                             ),
                             if (a.sizeBytes != null)
                               Text(
                                 formatBytes(a.sizeBytes),
-                                style: const TextStyle(
-                                    color: AppColors.txt3, fontSize: 12),
+                                style: TextStyle(
+                                    color: context.c.txt3, fontSize: 12),
                               ),
                             const SizedBox(width: 8),
                             if (busy)
@@ -663,8 +677,8 @@ class _AttachmentsCardState extends ConsumerState<_AttachmentsCard> {
                                 child: CircularProgressIndicator(strokeWidth: 2),
                               )
                             else
-                              const Icon(Icons.download_rounded,
-                                  size: 18, color: AppColors.txt3),
+                              Icon(Icons.download_rounded,
+                                  size: 18, color: context.c.txt3),
                           ],
                         ),
                       ),
@@ -703,9 +717,9 @@ class _ApproverChainCard extends StatelessWidget {
         children: [
           const SectionHeader('Approval Route'),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             'This note follows its own route rather than the standard hierarchy.',
-            style: TextStyle(color: AppColors.txt3, fontSize: 12.5),
+            style: TextStyle(color: context.c.txt3, fontSize: 12.5),
           ),
           const SizedBox(height: 16),
           ...chain.map((a) {
@@ -726,18 +740,18 @@ class _ApproverChainCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: isCurrent
                           ? AppColors.pink.withValues(alpha: 0.18)
-                          : AppColors.surface2,
+                          : context.c.surface2,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: isCurrent ? AppColors.pink : AppColors.line2,
+                        color: isCurrent ? AppColors.pink : context.c.line2,
                       ),
                     ),
                     child: isDone
-                        ? const Icon(Icons.check_rounded,
-                            size: 15, color: AppColors.ok)
+                        ? Icon(Icons.check_rounded,
+                            size: 15, color: context.c.ok)
                         : Text('L${a.level}',
                             style: TextStyle(
-                              color: isCurrent ? AppColors.pink : AppColors.txt3,
+                              color: isCurrent ? AppColors.pink : context.c.txt3,
                               fontSize: 11.5,
                               fontWeight: FontWeight.w800,
                             )),
@@ -749,7 +763,7 @@ class _ApproverChainCard extends StatelessWidget {
                       children: [
                         Text(a.userName,
                             style: TextStyle(
-                              color: isCurrent ? AppColors.txt : AppColors.txt2,
+                              color: isCurrent ? context.c.txt : context.c.txt2,
                               fontSize: 13.5,
                               fontWeight:
                                   isCurrent ? FontWeight.w700 : FontWeight.w600,
@@ -758,8 +772,8 @@ class _ApproverChainCard extends StatelessWidget {
                           a.roleName.isEmpty
                               ? a.userEmail
                               : '${a.userEmail} · ${a.roleName}',
-                          style: const TextStyle(
-                              color: AppColors.txt3, fontSize: 12),
+                          style: TextStyle(
+                              color: context.c.txt3, fontSize: 12),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
@@ -813,7 +827,7 @@ class _ApprovalTrailCard extends StatelessWidget {
           // Progress bar
           LinearProgressIndicator(
             value: totalLevels > 0 ? currentLevel / totalLevels : 0,
-            backgroundColor: AppColors.surface3,
+            backgroundColor: context.c.surface3,
             valueColor:
                 const AlwaysStoppedAnimation<Color>(AppColors.pink),
             minHeight: 6,
@@ -824,13 +838,13 @@ class _ApprovalTrailCard extends StatelessWidget {
             child: Text(
               '$currentLevel of $totalLevels levels completed',
               style:
-                  const TextStyle(color: AppColors.txt3, fontSize: 12),
+                  TextStyle(color: context.c.txt3, fontSize: 12),
             ),
           ),
           const SizedBox(height: 12),
           if (_count == 0)
-            const Text('No approval actions yet.',
-                style: TextStyle(color: AppColors.txt3, fontSize: 13.5))
+            Text('No approval actions yet.',
+                style: TextStyle(color: context.c.txt3, fontSize: 13.5))
           else
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -880,7 +894,7 @@ class _RoundHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          const Expanded(child: Divider(color: AppColors.line, height: 1)),
+          Expanded(child: Divider(color: context.c.line, height: 1)),
         ],
       ),
     );
@@ -894,7 +908,7 @@ class _ApprovalStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isApproved = action.isApproved;
-    final color = isApproved ? AppColors.ok : AppColors.bad;
+    final color = isApproved ? context.c.ok : context.c.bad;
     final icon = isApproved
         ? Icons.check_circle_rounded
         : Icons.cancel_rounded;
@@ -927,24 +941,24 @@ class _ApprovalStep extends StatelessWidget {
                   ),
                   Text(
                     action.approverName,
-                    style: const TextStyle(
-                        color: AppColors.txt, fontSize: 13.5, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                        color: context.c.txt, fontSize: 13.5, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
               const Spacer(),
               Text(
                 formatDateTime(action.actedAt),
-                style: const TextStyle(
-                    color: AppColors.txt3, fontSize: 11.5),
+                style: TextStyle(
+                    color: context.c.txt3, fontSize: 11.5),
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
             '"${action.remark}"',
-            style: const TextStyle(
-                color: AppColors.txt2,
+            style: TextStyle(
+                color: context.c.txt2,
                 fontSize: 13,
                 fontStyle: FontStyle.italic,
                 height: 1.5),

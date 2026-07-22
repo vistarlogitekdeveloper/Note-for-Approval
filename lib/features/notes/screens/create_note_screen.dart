@@ -9,6 +9,7 @@ import '../../../core/utils/formatters.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
 import '../providers/notes_provider.dart';
+import '../../../features/auth/providers/auth_provider.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/widgets/common_widgets.dart';
 import '../../../shared/widgets/gradient_button.dart';
@@ -62,9 +63,13 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
   /// Already on the server. Removed via the API, not from a local list.
   List<NoteAttachment> _existing = const [];
 
-  /// The rejection that sent this note back, when it was returned. Shown above
-  /// the form so the initiator can see what to fix.
-  ApprovalAction? _lastRejection;
+  /// The reassign (send-back) that returned this note. Shown above the form so
+  /// the creator can see what to change.
+  ApprovalAction? _lastSendBack;
+
+  /// How many leading approvers are already approved and therefore locked while
+  /// revising a returned note. 0 for a fresh draft.
+  int _lockedCount = 0;
 
   /// Picked in the browser but not yet uploaded — a note must exist first.
   final List<AttachmentUpload> _staged = [];
@@ -80,6 +85,12 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
   /// whose chain is untouched sends nothing, so an edit that only changes the
   /// text cannot accidentally clear a chain set elsewhere.
   bool _chainDirty = false;
+
+  /// Who owns this note. On a new note that is the current user; on an edit it
+  /// is the note's initiator (an admin may edit someone else's note). Either
+  /// way this person is the initiator and must never appear as a selectable
+  /// approver — you cannot approve your own note.
+  String? _initiatorId;
 
   @override
   void initState() {
@@ -107,6 +118,7 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
           await ref.read(notesRepositoryProvider).getNoteById(_noteId!);
       if (!mounted) return;
       setState(() {
+        _initiatorId = note.initiatorId;
         _selectedPurposeId = note.purposeId;
         _selectedPurposeLabel = note.purposeLabel;
         _objectiveDetailCtrl.text = note.objectiveInDetail;
@@ -115,10 +127,13 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
         _costImpactCtrl.text = note.costImpact;
         _existing = note.attachments;
         _status = note.status;
-        // The most recent rejection is the one that sent it back; earlier
-        // rounds are history and belong in the trail, not on the form.
-        _lastRejection = note.approvalTrail
-            .where((a) => !a.isApproved)
+        // Levels already approved are locked while revising — the note resumes
+        // from the first unapproved one on resubmit.
+        _lockedCount = note.lockedApproverCount;
+        // The most recent send-back is the one that returned it; earlier rounds
+        // are history and belong in the trail, not on the form.
+        _lastSendBack = note.approvalTrail
+            .where((a) => a.isReassigned)
             .fold<ApprovalAction?>(
               null,
               (latest, a) => latest == null || a.revision >= latest.revision ? a : latest,
@@ -131,7 +146,7 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                   id: a.userId,
                   name: a.userName,
                   email: a.userEmail,
-                  role: UserRole.approver,
+                  role: UserRole.user,
                   hierarchyRoleName: a.roleName,
                 ))
             .toList();
@@ -147,17 +162,20 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
     }
   }
 
-  /// A draft is still being written; a rejected note has been sent back to be
-  /// revised. Both belong to the initiator. Anything else is in flight and the
-  /// server would refuse the save.
+  /// A draft is still being written; a returned note has been sent back to be
+  /// revised. Both belong to the creator. Anything else is in flight (or is a
+  /// terminal rejection) and the server would refuse the save.
   bool get _editable =>
       _status == null ||
       _status == NoteStatus.draft ||
-      _status == NoteStatus.rejected;
+      _status == NoteStatus.returned;
 
   /// True when this is a revision of a note an approver sent back, which is a
   /// different thing from finishing a draft and should read that way.
-  bool get _isRevision => _status == NoteStatus.rejected;
+  bool get _isRevision => _status == NoteStatus.returned;
+
+  /// Where the note will resume on resubmit: the first level not yet approved.
+  int get _resumeLevel => _lockedCount + 1;
 
   Map<String, dynamic> _buildData() => {
         'purposeId': _selectedPurposeId,
@@ -242,11 +260,17 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
   /// Anyone already on the chain is excluded — the same person twice would
   /// mean approving their own earlier approval.
   Future<void> _addApprover() async {
+    // The initiator is excluded alongside anyone already on the chain: a new
+    // note's owner is the current user, an edited note's owner is its
+    // initiator. Neither can be their own approver.
+    final initiatorId = _initiatorId ?? ref.read(authProvider).user?.id;
+    final exclude = {
+      ..._chain.map((u) => u.id),
+      if (initiatorId != null) initiatorId,
+    };
     final chosen = await showDialog<User>(
       context: context,
-      builder: (_) => _ApproverPickerDialog(
-        excludeIds: _chain.map((u) => u.id).toSet(),
-      ),
+      builder: (_) => _ApproverPickerDialog(excludeIds: exclude),
     );
     if (chosen == null || !mounted) return;
     setState(() {
@@ -337,7 +361,7 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                   Text(
                     _isEdit ? 'Edit Note' : 'Raise New Note',
                     style: GoogleFonts.bricolageGrotesque(
-                      color: AppColors.txt,
+                      color: context.c.txt,
                       fontSize: 28,
                       fontWeight: FontWeight.w800,
                       letterSpacing: -0.5,
@@ -347,10 +371,13 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                     !_editable
                         ? 'This note is in flight and can no longer be changed'
                         : _isRevision
-                            ? 'Address the feedback below, then submit again — '
-                                'it restarts at level 1'
+                            ? (_lockedCount > 0
+                                ? 'Revise the hierarchy below, then resubmit — '
+                                    'levels 1–$_lockedCount are approved and locked; '
+                                    'it resumes from level $_resumeLevel'
+                                : 'Address the feedback below, then resubmit for approval')
                             : 'Fill in all mandatory fields and submit for approval',
-                    style: const TextStyle(color: AppColors.txt3, fontSize: 14),
+                    style: TextStyle(color: context.c.txt3, fontSize: 14),
                   ),
                 ],
               ),
@@ -369,14 +396,14 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
           if (!_editable)
             _Banner(
               msg: 'This note is ${_status!.label.toLowerCase()} and is no longer '
-                  'editable. Only a draft, or a note returned after rejection, '
+                  'editable. Only a draft, or a note sent back for revision, '
                   'can be changed.',
               isError: true,
             ),
 
           // Revising blind would be pointless — show what the approver said.
-          if (_isRevision && _lastRejection != null)
-            _RejectionNotice(action: _lastRejection!),
+          if (_isRevision && _lastSendBack != null)
+            _SendBackNotice(action: _lastSendBack!),
 
           // Form card
           VistarCard(
@@ -403,8 +430,8 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                         // The form is only built once the note has loaded, so
                         // the initial value already carries the saved purpose.
                         initialValue: value,
-                        dropdownColor: AppColors.surface2,
-                        style: const TextStyle(color: AppColors.txt, fontSize: 14),
+                        dropdownColor: context.c.surface2,
+                        style: TextStyle(color: context.c.txt, fontSize: 14),
                         decoration: InputDecoration(
                           labelText: 'Purpose / Objective *',
                           prefixIcon: const Icon(Icons.flag_outlined),
@@ -471,7 +498,7 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                     final twoCol = c.maxWidth > 700;
                     final benefitField = TextFormField(
                       controller: _benefitCtrl,
-                      style: const TextStyle(color: AppColors.txt, fontSize: 14),
+                      style: TextStyle(color: context.c.txt, fontSize: 14),
                       minLines: 3,
                       maxLines: null,
                       enabled: _editable,
@@ -485,7 +512,7 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                     );
                     final costField = TextFormField(
                       controller: _costImpactCtrl,
-                      style: const TextStyle(color: AppColors.txt, fontSize: 14),
+                      style: TextStyle(color: context.c.txt, fontSize: 14),
                       minLines: 3,
                       maxLines: null,
                       enabled: _editable,
@@ -521,12 +548,16 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                   _ApproverChainSection(
                     chain: _chain,
                     enabled: _editable && !formState.loading,
+                    lockedCount: _lockedCount,
                     onAdd: _addApprover,
                     onRemove: (i) => setState(() {
+                      if (i < _lockedCount) return; // locked — approved already
                       _chain.removeAt(i);
                       _chainDirty = true;
                     }),
                     onMove: (from, to) => setState(() {
+                      // Never move into or out of the locked approved prefix.
+                      if (from < _lockedCount || to < _lockedCount) return;
                       final u = _chain.removeAt(from);
                       _chain.insert(to, u);
                       _chainDirty = true;
@@ -658,7 +689,7 @@ class _CharLimitFieldState extends State<_CharLimitField> {
       children: [
         TextFormField(
           controller: widget.controller,
-          style: const TextStyle(color: AppColors.txt, fontSize: 14),
+          style: TextStyle(color: context.c.txt, fontSize: 14),
           // null maxLines is what makes the box grow instead of scroll.
           minLines: _CharLimitField._minLines,
           maxLines: null,
@@ -675,7 +706,7 @@ class _CharLimitFieldState extends State<_CharLimitField> {
         Text(
           '$_chars / ${widget.maxChars}',
           style: TextStyle(
-            color: overLimit ? AppColors.bad : AppColors.txt3,
+            color: overLimit ? context.c.bad : context.c.txt3,
             fontSize: 11.5,
           ),
         ),
@@ -694,6 +725,7 @@ class _ApproverChainSection extends StatelessWidget {
     required this.onAdd,
     required this.onRemove,
     required this.onMove,
+    this.lockedCount = 0,
   });
 
   final List<User> chain;
@@ -701,6 +733,12 @@ class _ApproverChainSection extends StatelessWidget {
   final VoidCallback onAdd;
   final void Function(int index) onRemove;
   final void Function(int from, int to) onMove;
+
+  /// How many leading approvers are already approved and therefore LOCKED —
+  /// they cannot be removed, moved, or moved past. Only set when revising a
+  /// note that was sent back mid-flow; the tail below the lock is fully
+  /// editable. See [Note.lockedApproverCount].
+  final int lockedCount;
 
   @override
   Widget build(BuildContext context) {
@@ -712,19 +750,19 @@ class _ApproverChainSection extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
-              color: AppColors.surface2,
+              color: context.c.surface2,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.line2),
+              border: Border.all(color: context.c.line2),
             ),
-            child: const Row(
+            child: Row(
               children: [
-                Icon(Icons.account_tree_outlined, size: 18, color: AppColors.txt3),
+                Icon(Icons.account_tree_outlined, size: 18, color: context.c.txt3),
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     'This note will follow the standard company approval hierarchy. '
                     'Add approvers below to give it its own route instead.',
-                    style: TextStyle(color: AppColors.txt2, fontSize: 13),
+                    style: TextStyle(color: context.c.txt2, fontSize: 13),
                   ),
                 ),
               ],
@@ -734,14 +772,24 @@ class _ApproverChainSection extends StatelessWidget {
           ...chain.asMap().entries.map((e) {
             final i = e.key;
             final u = e.value;
+            // Already approved and frozen: no move, no remove, and nothing can
+            // move above it. The first editable position sits just below.
+            final locked = i < lockedCount;
+            final badgeColor = locked ? context.c.ok : AppColors.pink;
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
-                  color: AppColors.surface2,
+                  color: locked
+                      ? context.c.ok.withValues(alpha: 0.06)
+                      : context.c.surface2,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.line2),
+                  border: Border.all(
+                    color: locked
+                        ? context.c.ok.withValues(alpha: 0.35)
+                        : context.c.line2,
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -751,13 +799,13 @@ class _ApproverChainSection extends StatelessWidget {
                       height: 34,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: AppColors.pink.withValues(alpha: 0.15),
+                        color: badgeColor.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(9),
-                        border: Border.all(color: AppColors.pink.withValues(alpha: 0.4)),
+                        border: Border.all(color: badgeColor.withValues(alpha: 0.4)),
                       ),
                       child: Text('L${i + 1}',
-                          style: const TextStyle(
-                              color: AppColors.pink,
+                          style: TextStyle(
+                              color: badgeColor,
                               fontSize: 12,
                               fontWeight: FontWeight.w800)),
                     ),
@@ -766,40 +814,61 @@ class _ApproverChainSection extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(u.name,
-                              style: const TextStyle(
-                                  color: AppColors.txt,
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w600)),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(u.name,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        color: context.c.txt,
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w600)),
+                              ),
+                              if (locked) ...[
+                                const SizedBox(width: 8),
+                                Icon(Icons.lock_rounded,
+                                    size: 13, color: context.c.ok),
+                                const SizedBox(width: 3),
+                                Text('Approved',
+                                    style: TextStyle(
+                                        color: context.c.ok,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700)),
+                              ],
+                            ],
+                          ),
                           Text(
                             u.hierarchyRoleName == null || u.hierarchyRoleName!.isEmpty
                                 ? u.email
                                 : '${u.email} · ${u.hierarchyRoleName}',
-                            style: const TextStyle(color: AppColors.txt3, fontSize: 12),
+                            style: TextStyle(color: context.c.txt3, fontSize: 12),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
                     ),
-                    if (enabled) ...[
+                    // Locked rows show no controls; the tail is fully editable.
+                    if (enabled && !locked) ...[
                       IconButton(
                         tooltip: 'Move up',
-                        onPressed: i == 0 ? null : () => onMove(i, i - 1),
+                        // Can't move into or above the locked prefix.
+                        onPressed:
+                            i <= lockedCount ? null : () => onMove(i, i - 1),
                         icon: const Icon(Icons.arrow_upward_rounded, size: 16),
-                        color: AppColors.txt3,
+                        color: context.c.txt3,
                       ),
                       IconButton(
                         tooltip: 'Move down',
                         onPressed:
                             i == chain.length - 1 ? null : () => onMove(i, i + 1),
                         icon: const Icon(Icons.arrow_downward_rounded, size: 16),
-                        color: AppColors.txt3,
+                        color: context.c.txt3,
                       ),
                       IconButton(
                         tooltip: 'Remove',
                         onPressed: () => onRemove(i),
                         icon: const Icon(Icons.close_rounded, size: 16),
-                        color: AppColors.txt3,
+                        color: context.c.txt3,
                       ),
                     ],
                   ],
@@ -838,9 +907,9 @@ class _ApproverPickerDialogState extends ConsumerState<_ApproverPickerDialog> {
     final async = ref.watch(selectableApproversProvider);
 
     return AlertDialog(
-      backgroundColor: AppColors.surface,
-      title: const Text('Add approver',
-          style: TextStyle(color: AppColors.txt, fontSize: 17)),
+      backgroundColor: context.c.surface,
+      title: Text('Add approver',
+          style: TextStyle(color: context.c.txt, fontSize: 17)),
       content: SizedBox(
         width: 420,
         height: 420,
@@ -848,7 +917,7 @@ class _ApproverPickerDialogState extends ConsumerState<_ApproverPickerDialog> {
           children: [
             TextField(
               autofocus: true,
-              style: const TextStyle(color: AppColors.txt, fontSize: 14),
+              style: TextStyle(color: context.c.txt, fontSize: 14),
               decoration: const InputDecoration(
                 hintText: 'Search by name or email',
                 prefixIcon: Icon(Icons.search_rounded),
@@ -862,7 +931,7 @@ class _ApproverPickerDialogState extends ConsumerState<_ApproverPickerDialog> {
                 error: (e, _) => Center(
                   child: Text('Could not load approvers.\n$e',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: AppColors.bad, fontSize: 13)),
+                      style: TextStyle(color: context.c.bad, fontSize: 13)),
                 ),
                 data: (users) {
                   final available = users
@@ -886,14 +955,14 @@ class _ApproverPickerDialogState extends ConsumerState<_ApproverPickerDialog> {
                       return ListTile(
                         dense: true,
                         title: Text(u.name,
-                            style: const TextStyle(
-                                color: AppColors.txt, fontSize: 13.5)),
+                            style: TextStyle(
+                                color: context.c.txt, fontSize: 13.5)),
                         subtitle: Text(
                           u.hierarchyRoleName == null || u.hierarchyRoleName!.isEmpty
                               ? u.email
                               : '${u.email} · ${u.hierarchyRoleName}',
-                          style: const TextStyle(
-                              color: AppColors.txt3, fontSize: 12),
+                          style: TextStyle(
+                              color: context.c.txt3, fontSize: 12),
                         ),
                         onTap: () => Navigator.of(context).pop(u),
                       );
@@ -951,20 +1020,20 @@ class _AttachmentsSection extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 28),
               decoration: BoxDecoration(
-                color: AppColors.surface2,
+                color: context.c.surface2,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.line2),
+                border: Border.all(color: context.c.line2),
               ),
-              child: const Column(
+              child: Column(
                 children: [
                   Icon(Icons.cloud_upload_outlined,
-                      color: AppColors.txt3, size: 36),
+                      color: context.c.txt3, size: 36),
                   SizedBox(height: 10),
                   Text('Click to browse files',
-                      style: TextStyle(color: AppColors.txt2, fontSize: 14)),
+                      style: TextStyle(color: context.c.txt2, fontSize: 14)),
                   SizedBox(height: 4),
                   Text('PDF, DOCX, XLSX, PNG, JPG — max 20 MB each, 10 at a time',
-                      style: TextStyle(color: AppColors.txt3, fontSize: 12)),
+                      style: TextStyle(color: context.c.txt3, fontSize: 12)),
                 ],
               ),
             ),
@@ -975,15 +1044,15 @@ class _AttachmentsSection extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             error!,
-            style: const TextStyle(color: AppColors.bad, fontSize: 12.5),
+            style: TextStyle(color: context.c.bad, fontSize: 12.5),
           ),
         ],
 
         if (existing.isNotEmpty) ...[
           const SizedBox(height: 14),
-          const Text('Uploaded',
+          Text('Uploaded',
               style: TextStyle(
-                  color: AppColors.txt3,
+                  color: context.c.txt3,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.5)),
@@ -1003,9 +1072,9 @@ class _AttachmentsSection extends StatelessWidget {
 
         if (staged.isNotEmpty) ...[
           const SizedBox(height: 14),
-          const Text('Will upload on save',
+          Text('Will upload on save',
               style: TextStyle(
-                  color: AppColors.txt3,
+                  color: context.c.txt3,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.5)),
@@ -1046,33 +1115,33 @@ class _FileChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.surface3,
+        color: context.c.surface3,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: pending ? AppColors.pink : AppColors.line2),
+        border: Border.all(color: pending ? AppColors.pink : context.c.line2),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(pending ? Icons.schedule_rounded : Icons.attach_file_rounded,
-              size: 14, color: pending ? AppColors.pink : AppColors.txt3),
+              size: 14, color: pending ? AppColors.pink : context.c.txt3),
           const SizedBox(width: 6),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 220),
             child: Text(name,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: AppColors.txt2, fontSize: 13)),
+                style: TextStyle(color: context.c.txt2, fontSize: 13)),
           ),
           if (detail != null) ...[
             const SizedBox(width: 6),
             Text(detail!,
-                style: const TextStyle(color: AppColors.txt3, fontSize: 11.5)),
+                style: TextStyle(color: context.c.txt3, fontSize: 11.5)),
           ],
           if (onRemove != null) ...[
             const SizedBox(width: 8),
             GestureDetector(
               onTap: onRemove,
-              child: const Icon(Icons.close_rounded,
-                  size: 14, color: AppColors.txt3),
+              child: Icon(Icons.close_rounded,
+                  size: 14, color: context.c.txt3),
             ),
           ],
         ],
@@ -1091,8 +1160,8 @@ class _FieldShimmer extends StatelessWidget {
 }
 
 /// What the approver said when they sent the note back.
-class _RejectionNotice extends StatelessWidget {
-  const _RejectionNotice({required this.action});
+class _SendBackNotice extends StatelessWidget {
+  const _SendBackNotice({required this.action});
   final ApprovalAction action;
 
   @override
@@ -1101,23 +1170,23 @@ class _RejectionNotice extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.bad.withValues(alpha: 0.08),
+        color: context.c.warn.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.bad.withValues(alpha: 0.3)),
+        border: Border.all(color: context.c.warn.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.undo_rounded, color: AppColors.bad, size: 18),
+              Icon(Icons.reply_rounded, color: context.c.warn, size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Returned by ${action.approverName}'
+                  'Sent back by ${action.approverName}'
                   '${action.roleName.isEmpty ? '' : ' · ${action.roleName}'}',
-                  style: const TextStyle(
-                    color: AppColors.bad,
+                  style: TextStyle(
+                    color: context.c.warn,
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1127,14 +1196,14 @@ class _RejectionNotice extends StatelessWidget {
                 Text(
                   formatDate(action.actedAt),
                   style:
-                      const TextStyle(color: AppColors.txt3, fontSize: 11.5),
+                      TextStyle(color: context.c.txt3, fontSize: 11.5),
                 ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
             action.remark,
-            style: const TextStyle(color: AppColors.txt2, fontSize: 13.5),
+            style: TextStyle(color: context.c.txt2, fontSize: 13.5),
           ),
         ],
       ),
@@ -1149,7 +1218,7 @@ class _Banner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isError ? AppColors.bad : AppColors.ok;
+    final color = isError ? context.c.bad : context.c.ok;
     final icon = isError ? Icons.error_outline : Icons.check_circle_outline;
     return Container(
       margin: const EdgeInsets.only(bottom: 16),

@@ -1,16 +1,22 @@
-/// Wire values are `draft` | `pendingApproval` | `approved` | `rejected` —
-/// `pendingApproval` is camelCase as a value, so the enum names map directly.
+/// Wire values are `draft` | `pendingApproval` | `approved` | `rejected` |
+/// `returned` — the enum names map directly (camelCase values included).
+///
+/// `rejected` is terminal. `returned` is a note an approver sent back for
+/// revision (reassign): it belongs to its creator again, is editable, and
+/// resubmits to RESUME at the level it was sent back from — see [Note].
 enum NoteStatus {
   draft,
   pendingApproval,
   approved,
-  rejected;
+  rejected,
+  returned;
 
   String get label => switch (this) {
         NoteStatus.draft => 'Draft',
         NoteStatus.pendingApproval => 'Pending',
         NoteStatus.approved => 'Approved',
         NoteStatus.rejected => 'Rejected',
+        NoteStatus.returned => 'Returned',
       };
 
   /// The value the API expects for `?status=`.
@@ -101,7 +107,7 @@ class ApprovalAction {
   final String roleName;
   final String approverId;
   final String approverName;
-  final String action; // 'approved' | 'rejected'
+  final String action; // 'approved' | 'rejected' | 'reassigned'
   final String remark;
   final DateTime? actedAt;
 
@@ -118,6 +124,11 @@ class ApprovalAction {
   });
 
   bool get isApproved => action == 'approved';
+  bool get isRejected => action == 'rejected';
+
+  /// An approver sent the note back to its creator to revise the hierarchy —
+  /// not an approval, not a rejection.
+  bool get isReassigned => action == 'reassigned';
 
   factory ApprovalAction.fromJson(Map<String, dynamic> j) {
     final approver = (j['approver'] as Map?)?.cast<String, dynamic>();
@@ -240,8 +251,9 @@ class Note {
   final int currentLevel; // 0 = not yet submitted, 1..N = at which level
   final int totalLevels; // frozen at submit time
 
-  /// Which attempt the note is on. A rejection returns it to the initiator;
-  /// resubmitting bumps this and restarts at level 1.
+  /// Which attempt the note is on. A reassign returns it to the creator;
+  /// resubmitting bumps this and RESUMES at the level it was sent back from —
+  /// the already-approved levels below stay approved.
   final int revision;
 
   final String initiatorId;
@@ -294,16 +306,27 @@ class Note {
   bool get isDraft => status == NoteStatus.draft;
   bool get hasPdf => status == NoteStatus.approved;
 
-  /// A rejected note is not dead — it has been sent back to its initiator to
-  /// revise and resubmit. Only they can act on it.
-  bool get isReturned => status == NoteStatus.rejected;
+  /// A returned note was sent back by an approver (reassign) to its creator to
+  /// revise the hierarchy and resubmit. Distinct from [isRejected], which is
+  /// terminal. Only the creator can act on a returned note.
+  bool get isReturned => status == NoteStatus.returned;
+  bool get isRejected => status == NoteStatus.rejected;
+
+  /// How many leading approvers are already approved and therefore LOCKED on a
+  /// returned note. A note only reaches level L once levels 1..L-1 have all
+  /// approved, and it is sent back AT [currentLevel] — so that many levels
+  /// below it are locked. 0 for anything not mid-resume (a fresh draft, or a
+  /// note sent back before its first approval).
+  int get lockedApproverCount =>
+      isReturned ? (currentLevel - 1).clamp(0, approverChain.length) : 0;
 
   /// Whether [userId] may edit and resubmit this note right now. Mirrors the
-  /// server's EDITABLE_STATUSES + initiator-only rule.
+  /// server's EDITABLE_STATUSES + initiator-only rule: a draft, or a note
+  /// returned for revision. A rejected note is terminal and NOT editable.
   bool editableBy(String? userId) =>
       userId != null &&
       initiatorId == userId &&
-      (status == NoteStatus.draft || status == NoteStatus.rejected);
+      (status == NoteStatus.draft || status == NoteStatus.returned);
 
   /// Decisions grouped into rounds, oldest round first, each round's entries
   /// in level order. A note that was never rejected has a single round.

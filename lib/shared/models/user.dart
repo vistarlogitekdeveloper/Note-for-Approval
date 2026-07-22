@@ -1,20 +1,31 @@
-/// Approval roles in the hierarchy
+/// The two application roles (backend migration 090):
+///   admin — full access, may act on any note.
+///   user  — creates notes, and approves / rejects / reassigns the notes that
+///           name them on a chain.
+///
+/// The getter names are kept from the old four-role model so call sites don't
+/// all have to change: `canApprove` is now true for everyone (the real gate is
+/// whether the note's chain names you at its current level), and `isInitiator`
+/// is true for everyone (both roles raise notes).
 enum UserRole {
-  initiator,
-  approver,
   admin,
-  superAdmin;
+  user;
 
-  bool get canAdmin => this == admin || this == superAdmin;
-  bool get canApprove => this == approver || this == admin || this == superAdmin;
-  bool get canManageUsers => this == admin || this == superAdmin;
-  bool get isInitiator => this == initiator;
+  bool get canAdmin => this == admin;
+  bool get canApprove => true;
+  bool get canManageUsers => this == admin;
+  bool get isInitiator => true;
 
   String get label => switch (this) {
-        UserRole.initiator => 'Initiator',
-        UserRole.approver => 'Approver',
         UserRole.admin => 'Admin',
-        UserRole.superAdmin => 'Super Admin',
+        UserRole.user => 'User',
+      };
+
+  /// Tolerant of the pre-090 wire values so a cached token or an old response
+  /// still resolves: initiator/approver -> user, superAdmin -> admin.
+  factory UserRole.fromWire(String? s) => switch (s) {
+        'admin' || 'superAdmin' => UserRole.admin,
+        _ => UserRole.user,
       };
 }
 
@@ -43,10 +54,7 @@ class User {
         id: j['id'] as String,
         name: j['name'] as String? ?? '',
         email: j['email'] as String? ?? '',
-        role: UserRole.values.firstWhere(
-          (r) => r.name == j['role'],
-          orElse: () => UserRole.initiator,
-        ),
+        role: UserRole.fromWire(j['role'] as String?),
         hierarchyLevel: (j['hierarchy_level'] as num?)?.toInt(),
         hierarchyRoleName: j['hierarchy_role_name'] as String?,
         isActive: j['is_active'] as bool? ?? true,

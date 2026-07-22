@@ -36,7 +36,7 @@ class DashboardScreen extends ConsumerWidget {
                   Text(
                     'Dashboard',
                     style: GoogleFonts.bricolageGrotesque(
-                      color: AppColors.txt,
+                      color: context.c.txt,
                       fontSize: 28,
                       fontWeight: FontWeight.w800,
                       letterSpacing: -0.5,
@@ -44,7 +44,7 @@ class DashboardScreen extends ConsumerWidget {
                   ),
                   Text(
                     'Welcome back, ${user?.name ?? 'User'}',
-                    style: const TextStyle(color: AppColors.txt3, fontSize: 14),
+                    style: TextStyle(color: context.c.txt3, fontSize: 14),
                   ),
                 ],
               ),
@@ -115,7 +115,7 @@ class DashboardScreen extends ConsumerWidget {
               )),
             ),
             error: (e, _) => Text('Error: $e',
-                style: const TextStyle(color: AppColors.bad)),
+                style: TextStyle(color: context.c.bad)),
           ),
         ],
       ),
@@ -164,7 +164,7 @@ class _KpiGrid extends ConsumerWidget {
           label: 'Total Notes',
           value: '${stats.totalNotes}',
           icon: Icons.description_outlined,
-          color: AppColors.info,
+          color: context.c.info,
           onTap: () => _open(context, ref, null),
         ),
         // Drafts were missing, which made the totals look wrong: the API counts
@@ -174,14 +174,14 @@ class _KpiGrid extends ConsumerWidget {
           label: 'Drafts',
           value: '${stats.draftNotes}',
           icon: Icons.edit_note_rounded,
-          color: AppColors.txt3,
+          color: context.c.txt3,
           onTap: () => _open(context, ref, NoteStatus.draft.wireValue),
         ),
         KpiCard(
           label: 'Pending',
           value: '${stats.pendingNotes}',
           icon: Icons.pending_actions_outlined,
-          color: AppColors.warn,
+          color: context.c.warn,
           onTap: () =>
               _open(context, ref, NoteStatus.pendingApproval.wireValue),
         ),
@@ -189,14 +189,14 @@ class _KpiGrid extends ConsumerWidget {
           label: 'Approved',
           value: '${stats.approvedNotes}',
           icon: Icons.check_circle_outline_rounded,
-          color: AppColors.ok,
+          color: context.c.ok,
           onTap: () => _open(context, ref, NoteStatus.approved.wireValue),
         ),
         KpiCard(
           label: 'Rejected',
           value: '${stats.rejectedNotes}',
           icon: Icons.cancel_outlined,
-          color: AppColors.bad,
+          color: context.c.bad,
           onTap: () => _open(context, ref, NoteStatus.rejected.wireValue),
         ),
       ],
@@ -229,19 +229,19 @@ class _PendingBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.warn.withValues(alpha: 0.08),
+        color: context.c.warn.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.warn.withValues(alpha: 0.25)),
+        border: Border.all(color: context.c.warn.withValues(alpha: 0.25)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.pending_actions_outlined,
-              color: AppColors.warn, size: 28),
+          Icon(Icons.pending_actions_outlined,
+              color: context.c.warn, size: 28),
           const SizedBox(width: 14),
           Expanded(
             child: Text(
               'You have $count ${count == 1 ? 'note' : 'notes'} waiting for your approval.',
-              style: const TextStyle(color: AppColors.txt, fontSize: 14.5),
+              style: TextStyle(color: context.c.txt, fontSize: 14.5),
             ),
           ),
           TextButton(
@@ -262,17 +262,17 @@ class _NoPendingBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.ok.withValues(alpha: 0.07),
+        color: context.c.ok.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.ok.withValues(alpha: 0.2)),
+        border: Border.all(color: context.c.ok.withValues(alpha: 0.2)),
       ),
-      child: const Row(
+      child: Row(
         children: [
           Icon(Icons.check_circle_outline_rounded,
-              color: AppColors.ok, size: 24),
+              color: context.c.ok, size: 24),
           SizedBox(width: 12),
           Text('No pending approvals — all caught up!',
-              style: TextStyle(color: AppColors.txt2, fontSize: 14)),
+              style: TextStyle(color: context.c.txt2, fontSize: 14)),
         ],
       ),
     );
@@ -311,13 +311,13 @@ class _NoteRow extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: AppColors.surface3,
+              color: context.c.surface3,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               note.noteNumber,
-              style: const TextStyle(
-                color: AppColors.txt2,
+              style: TextStyle(
+                color: context.c.txt2,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 fontFamily: 'monospace',
@@ -331,8 +331,8 @@ class _NoteRow extends StatelessWidget {
               children: [
                 Text(
                   note.purposeLabel,
-                  style: const TextStyle(
-                    color: AppColors.txt,
+                  style: TextStyle(
+                    color: context.c.txt,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),
@@ -342,7 +342,7 @@ class _NoteRow extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   truncate(note.objectiveInDetail, 80),
-                  style: const TextStyle(color: AppColors.txt3, fontSize: 12.5),
+                  style: TextStyle(color: context.c.txt3, fontSize: 12.5),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -357,7 +357,7 @@ class _NoteRow extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 timeAgo(note.createdAt),
-                style: const TextStyle(color: AppColors.txt3, fontSize: 11.5),
+                style: TextStyle(color: context.c.txt3, fontSize: 11.5),
               ),
             ],
           ),

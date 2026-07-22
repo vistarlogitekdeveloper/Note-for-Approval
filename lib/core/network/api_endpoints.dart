@@ -33,6 +33,10 @@ class ApiEndpoints {
   static String approveNote(String id) => '/notes/$id/approve';
   static String rejectNote(String id) => '/notes/$id/reject';
 
+  /// Send a note back to its creator to revise the hierarchy and resubmit.
+  /// Not a rejection — the note returns to `returned`, not `rejected`.
+  static String reassignNote(String id) => '/notes/$id/reassign';
+
   // ── Masters ──────────────────────────────────────────────────────────────
   static const purposes = '/masters/purposes';
   static String purposeById(String id) => '/masters/purposes/$id';

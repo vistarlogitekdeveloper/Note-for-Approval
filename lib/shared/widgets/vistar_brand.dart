@@ -71,28 +71,38 @@ class AmbientBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.c;
+    // In light mode the aurora glows are pulled right down to a faint pastel
+    // wash rather than the neon-on-black bloom — the same pools, a third of the
+    // intensity — and the grain flips from white speckle (invisible on white)
+    // to a barely-there dark speckle. This is the "clean functional light"
+    // treatment: the brand canvas stays recognisable without trying to glow.
+    final dim = p.isDark ? 1.0 : 0.32;
+    final grainColor = p.isDark ? Colors.white : Colors.black;
+    final grainOpacity = p.isDark ? 0.045 : 0.02;
+
     return Stack(
       children: [
-        const Positioned.fill(child: ColoredBox(color: AppColors.bg)),
+        Positioned.fill(child: ColoredBox(color: p.bg)),
 
         // Three aurora pools, matching the CSS radial-gradient stack.
-        const _Aurora(
-          alignment: Alignment(-0.76, -1.16),
-          size: Size(800, 600),
+        _Aurora(
+          alignment: const Alignment(-0.76, -1.16),
+          size: const Size(800, 600),
           color: AppColors.purple,
-          opacity: 0.22,
+          opacity: 0.22 * dim,
         ),
-        const _Aurora(
-          alignment: Alignment(1.1, -0.84),
-          size: Size(700, 600),
+        _Aurora(
+          alignment: const Alignment(1.1, -0.84),
+          size: const Size(700, 600),
           color: AppColors.pink,
-          opacity: 0.16,
+          opacity: 0.16 * dim,
         ),
-        const _Aurora(
-          alignment: Alignment(0.6, 1.2),
-          size: Size(900, 700),
+        _Aurora(
+          alignment: const Alignment(0.6, 1.2),
+          size: const Size(900, 700),
           color: AppColors.orange,
-          opacity: 0.12,
+          opacity: 0.12 * dim,
         ),
 
         if (showWatermark)
@@ -106,14 +116,16 @@ class AmbientBackground extends StatelessWidget {
                 child: VistarMark(
                   // 62vmax in the CSS.
                   size: MediaQuery.sizeOf(context).shortestSide * 0.62,
-                  opacity: 0.05,
+                  opacity: p.isDark ? 0.05 : 0.04,
                 ),
               ),
             ),
           ),
 
-        const Positioned.fill(
-          child: IgnorePointer(child: _Grain(opacity: 0.045)),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: _Grain(opacity: grainOpacity, color: grainColor),
+          ),
         ),
 
         if (child != null) Positioned.fill(child: child!),
@@ -160,17 +172,21 @@ class _Aurora extends StatelessWidget {
 /// Film grain. The CSS uses an SVG feTurbulence; this paints an equivalent
 /// deterministic speckle once into a tile, so it costs nothing to repeat.
 class _Grain extends StatelessWidget {
-  const _Grain({required this.opacity});
+  const _Grain({required this.opacity, this.color = Colors.white});
   final double opacity;
+  final Color color;
 
   @override
-  Widget build(BuildContext context) =>
-      CustomPaint(painter: _GrainPainter(opacity), isComplex: true, willChange: false);
+  Widget build(BuildContext context) => CustomPaint(
+      painter: _GrainPainter(opacity, color),
+      isComplex: true,
+      willChange: false);
 }
 
 class _GrainPainter extends CustomPainter {
-  _GrainPainter(this.opacity);
+  _GrainPainter(this.opacity, this.color);
   final double opacity;
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -181,13 +197,14 @@ class _GrainPainter extends CustomPainter {
     for (var i = 0; i < count; i++) {
       final dx = rand.nextDouble() * size.width;
       final dy = rand.nextDouble() * size.height;
-      paint.color = Colors.white.withValues(alpha: opacity * rand.nextDouble());
+      paint.color = color.withValues(alpha: opacity * rand.nextDouble());
       canvas.drawRect(Rect.fromLTWH(dx, dy, 1.2, 1.2), paint);
     }
   }
 
   @override
-  bool shouldRepaint(_GrainPainter old) => old.opacity != opacity;
+  bool shouldRepaint(_GrainPainter old) =>
+      old.opacity != opacity || old.color != color;
 }
 
 /// Splash loader: two counter-spinning rings around a breathing S, with the
@@ -274,8 +291,8 @@ class _SplashOrbitLoaderState extends State<SplashOrbitLoader>
         const SizedBox(height: 14),
         Text(
           widget.tagline,
-          style: const TextStyle(
-            color: AppColors.txt3,
+          style: TextStyle(
+            color: context.c.txt3,
             fontSize: 11,
             fontWeight: FontWeight.w600,
             letterSpacing: 3,
@@ -289,7 +306,8 @@ class _SplashOrbitLoaderState extends State<SplashOrbitLoader>
             width: 200,
             height: 4,
             child: ColoredBox(
-              color: Colors.white.withValues(alpha: 0.07),
+              color: (context.c.isDark ? Colors.white : Colors.black)
+                  .withValues(alpha: 0.07),
               child: AnimatedBuilder(
                 animation: _bar,
                 builder: (_, __) {
@@ -398,7 +416,7 @@ class _RouteLoaderState extends State<RouteLoader>
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: AppColors.bg.withValues(alpha: 0.55),
+      color: context.c.bg.withValues(alpha: 0.55),
       child: BackdropFilter(
         filter: ui.ImageFilter.blur(sigmaX: 2, sigmaY: 2),
         child: Center(

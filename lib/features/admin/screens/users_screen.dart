@@ -38,13 +38,13 @@ class UsersAdminScreen extends ConsumerWidget {
                 children: [
                   Text('Users',
                       style: GoogleFonts.bricolageGrotesque(
-                        color: AppColors.txt,
+                        color: context.c.txt,
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.5,
                       )),
-                  const Text('Manage user accounts and role assignments',
-                      style: TextStyle(color: AppColors.txt3, fontSize: 14)),
+                  Text('Manage user accounts and role assignments',
+                      style: TextStyle(color: context.c.txt3, fontSize: 14)),
                 ],
               ),
               const Spacer(),
@@ -68,7 +68,7 @@ class UsersAdminScreen extends ConsumerWidget {
               ),
               error: (e, _) => Center(
                 child: Text('Error: $e',
-                    style: const TextStyle(color: AppColors.bad)),
+                    style: TextStyle(color: context.c.bad)),
               ),
             ),
           ),
@@ -117,8 +117,7 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
   late final _emailCtrl = TextEditingController(text: widget.user?.email);
   final _passwordCtrl = TextEditingController();
 
-  late UserRole _role = widget.user?.role ?? UserRole.initiator;
-  late int? _level = widget.user?.hierarchyLevel;
+  late UserRole _role = widget.user?.role ?? UserRole.user;
 
   bool _saving = false;
   String? _error;
@@ -147,9 +146,6 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
     if (pw.isNotEmpty && pw.length < 6) {
       return 'Password must be at least 6 characters.';
     }
-    if (_role == UserRole.approver && _level == null) {
-      return 'An approver must be assigned a hierarchy level.';
-    }
     return null;
   }
 
@@ -174,7 +170,6 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
           email: _emailCtrl.text.trim(),
           role: _role,
           password: _passwordCtrl.text.isEmpty ? null : _passwordCtrl.text,
-          hierarchyLevel: _level,
         );
       } else {
         await repo.createUser(
@@ -182,7 +177,6 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
           email: _emailCtrl.text.trim(),
           role: _role,
           password: _passwordCtrl.text,
-          hierarchyLevel: _level,
         );
       }
       if (!mounted) return;
@@ -198,12 +192,10 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final levelsAsync = ref.watch(hierarchyLevelsProvider);
-
     return AlertDialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: context.c.surface,
       title: Text(_isEdit ? 'Edit User' : 'Add User',
-          style: const TextStyle(color: AppColors.txt, fontSize: 17)),
+          style: TextStyle(color: context.c.txt, fontSize: 17)),
       content: SizedBox(
         width: 440,
         child: SingleChildScrollView(
@@ -214,7 +206,7 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
               TextField(
                 controller: _nameCtrl,
                 enabled: !_saving,
-                style: const TextStyle(color: AppColors.txt),
+                style: TextStyle(color: context.c.txt),
                 decoration: const InputDecoration(labelText: 'Full Name *'),
               ),
               const SizedBox(height: 14),
@@ -222,7 +214,7 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
                 controller: _emailCtrl,
                 enabled: !_saving,
                 keyboardType: TextInputType.emailAddress,
-                style: const TextStyle(color: AppColors.txt),
+                style: TextStyle(color: context.c.txt),
                 decoration: const InputDecoration(labelText: 'Email *'),
               ),
               const SizedBox(height: 14),
@@ -230,7 +222,7 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
                 controller: _passwordCtrl,
                 enabled: !_saving,
                 obscureText: true,
-                style: const TextStyle(color: AppColors.txt),
+                style: TextStyle(color: context.c.txt),
                 decoration: InputDecoration(
                   labelText: _isEdit ? 'New Password' : 'Password *',
                   helperText: _isEdit
@@ -241,66 +233,29 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
               const SizedBox(height: 14),
               DropdownButtonFormField<UserRole>(
                 initialValue: _role,
-                dropdownColor: AppColors.surface2,
-                style: const TextStyle(color: AppColors.txt),
+                dropdownColor: context.c.surface2,
+                style: TextStyle(color: context.c.txt),
                 decoration: const InputDecoration(labelText: 'Role *'),
                 items: UserRole.values
                     .map((r) => DropdownMenuItem(value: r, child: Text(r.label)))
                     .toList(),
                 onChanged: _saving
                     ? null
-                    : (v) => setState(() {
-                          _role = v ?? UserRole.initiator;
-                          // Only approvers carry a level; the server pins it to
-                          // null for everyone else.
-                          if (_role != UserRole.approver) _level = null;
-                        }),
+                    : (v) => setState(() => _role = v ?? UserRole.user),
               ),
-
-              // Level is required for approvers and meaningless otherwise.
-              if (_role == UserRole.approver) ...[
-                const SizedBox(height: 14),
-                levelsAsync.when(
-                  loading: () => const ShimmerCard(height: 52),
-                  error: (e, _) => Text(
-                    'Could not load hierarchy levels: $e',
-                    style: const TextStyle(color: AppColors.bad, fontSize: 12.5),
-                  ),
-                  data: (levels) {
-                    final active = levels.where((l) => l.isActive).toList();
-                    final value =
-                        active.any((l) => l.level == _level) ? _level : null;
-                    return DropdownButtonFormField<int>(
-                      initialValue: value,
-                      dropdownColor: AppColors.surface2,
-                      style: const TextStyle(color: AppColors.txt),
-                      decoration:
-                          const InputDecoration(labelText: 'Hierarchy Level *'),
-                      items: active
-                          .map((l) => DropdownMenuItem(
-                                value: l.level,
-                                child: Text('L${l.level} — ${l.name}'),
-                              ))
-                          .toList(),
-                      onChanged:
-                          _saving ? null : (v) => setState(() => _level = v),
-                    );
-                  },
-                ),
-              ],
 
               if (_error != null) ...[
                 const SizedBox(height: 14),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.error_outline,
-                        size: 15, color: AppColors.bad),
+                    Icon(Icons.error_outline,
+                        size: 15, color: context.c.bad),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(_error!,
-                          style: const TextStyle(
-                              color: AppColors.bad, fontSize: 12.5)),
+                          style: TextStyle(
+                              color: context.c.bad, fontSize: 12.5)),
                     ),
                   ],
                 ),
@@ -356,9 +311,9 @@ class _UsersTable extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: context.c.line),
         borderRadius: BorderRadius.circular(16),
-        color: AppColors.surface,
+        color: context.c.surface,
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
@@ -377,15 +332,15 @@ class _UsersTable extends ConsumerWidget {
             },
             children: [
               TableRow(
-                decoration: const BoxDecoration(color: AppColors.surface2),
+                decoration: BoxDecoration(color: context.c.surface2),
                 children: ['Name', 'Email', 'Role', 'Hierarchy Role', 'Status', '']
                     .map((h) => Padding(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 13),
                           child: Text(
                             h.toUpperCase(),
-                            style: const TextStyle(
-                              color: AppColors.txt3,
+                            style: TextStyle(
+                              color: context.c.txt3,
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
                               letterSpacing: 0.6,
@@ -404,8 +359,8 @@ class _UsersTable extends ConsumerWidget {
 
   TableRow _userRow(BuildContext context, WidgetRef ref, User u) {
     return TableRow(
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.line)),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: context.c.line)),
       ),
       children: [
         Padding(
@@ -415,25 +370,25 @@ class _UsersTable extends ConsumerWidget {
               _avatar(u),
               const SizedBox(width: 10),
               Text(u.name,
-                  style: const TextStyle(
-                      color: AppColors.txt, fontSize: 13.5, fontWeight: FontWeight.w600)),
+                  style: TextStyle(
+                      color: context.c.txt, fontSize: 13.5, fontWeight: FontWeight.w600)),
             ],
           ),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
           child: Text(u.email,
-              style: const TextStyle(color: AppColors.txt2, fontSize: 13)),
+              style: TextStyle(color: context.c.txt2, fontSize: 13)),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-          child: _rolePill(u.role),
+          child: _rolePill(context, u.role),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
           child: Text(
             u.hierarchyRoleName ?? '—',
-            style: const TextStyle(color: AppColors.txt3, fontSize: 13),
+            style: TextStyle(color: context.c.txt3, fontSize: 13),
           ),
         ),
         Padding(
@@ -442,14 +397,14 @@ class _UsersTable extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: u.isActive
-                  ? AppColors.ok.withValues(alpha: 0.12)
-                  : AppColors.surface3,
+                  ? context.c.ok.withValues(alpha: 0.12)
+                  : context.c.surface3,
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
               u.isActive ? 'Active' : 'Inactive',
               style: TextStyle(
-                color: u.isActive ? AppColors.ok : AppColors.txt3,
+                color: u.isActive ? context.c.ok : context.c.txt3,
                 fontSize: 11.5,
                 fontWeight: FontWeight.w700,
               ),
@@ -459,7 +414,7 @@ class _UsersTable extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: AppColors.txt3, size: 18),
+            icon: Icon(Icons.more_vert, color: context.c.txt3, size: 18),
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'edit', child: Text('Edit')),
               PopupMenuItem(
@@ -496,12 +451,10 @@ class _UsersTable extends ConsumerWidget {
     );
   }
 
-  Widget _rolePill(UserRole role) {
+  Widget _rolePill(BuildContext context, UserRole role) {
     final color = switch (role) {
-      UserRole.superAdmin => AppColors.pink,
       UserRole.admin => AppColors.violet,
-      UserRole.approver => AppColors.info,
-      UserRole.initiator => AppColors.txt3,
+      UserRole.user => context.c.info,
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

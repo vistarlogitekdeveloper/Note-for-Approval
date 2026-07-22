@@ -22,10 +22,10 @@ class SectionHeader extends StatelessWidget {
         const SizedBox(width: 9),
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w800,
-            color: AppColors.txt,
+            color: context.c.txt,
             letterSpacing: -0.2,
           ),
         ),
@@ -53,13 +53,13 @@ class VistarCard extends StatelessWidget {
         child: Container(
           padding: padding ?? const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [AppColors.surface2, AppColors.surface],
+              colors: [context.c.surface2, context.c.surface],
             ),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.line),
+            border: Border.all(color: context.c.line),
           ),
           child: child,
         ),
@@ -124,7 +124,7 @@ class KpiCard extends StatelessWidget {
               if (onTap != null) ...[
                 const SizedBox(width: 6),
                 Icon(Icons.chevron_right_rounded,
-                    size: 15, color: AppColors.txt3.withValues(alpha: 0.7)),
+                    size: 15, color: context.c.txt3.withValues(alpha: 0.7)),
               ],
             ],
           ),
@@ -158,8 +158,8 @@ class KpiCard extends StatelessWidget {
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.txt3,
+            style: TextStyle(
+              color: context.c.txt3,
               fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
@@ -206,9 +206,9 @@ class _ShimmerCardState extends State<ShimmerCard>
         return Container(
           height: widget.height,
           decoration: BoxDecoration(
-            color: AppColors.surface2,
+            color: context.c.surface2,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.line),
+            border: Border.all(color: context.c.line),
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(16),
@@ -258,12 +258,12 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon ?? Icons.inbox_outlined, size: 56, color: AppColors.txt3),
+            Icon(icon ?? Icons.inbox_outlined, size: 56, color: context.c.txt3),
             const SizedBox(height: 16),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.txt3, fontSize: 15),
+              style: TextStyle(color: context.c.txt3, fontSize: 15),
             ),
             if (action != null) ...[const SizedBox(height: 20), action!],
           ],

@@ -46,13 +46,13 @@ class MyDecisionsScreen extends ConsumerWidget {
                   children: [
                     Text('My Decisions',
                         style: GoogleFonts.bricolageGrotesque(
-                          color: AppColors.txt,
+                          color: context.c.txt,
                           fontSize: 28,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.5,
                         )),
-                    const Text('Every note you have approved or rejected',
-                        style: TextStyle(color: AppColors.txt3, fontSize: 14)),
+                    Text('Every note you have approved or rejected',
+                        style: TextStyle(color: context.c.txt3, fontSize: 14)),
                   ],
                 ),
               ),
@@ -83,7 +83,7 @@ class MyDecisionsScreen extends ConsumerWidget {
                   child: _Tally(
                     label: 'Decisions made',
                     value: page.approved + page.rejected,
-                    color: AppColors.info,
+                    color: context.c.info,
                     icon: Icons.gavel_rounded,
                   ),
                 ),
@@ -92,7 +92,7 @@ class MyDecisionsScreen extends ConsumerWidget {
                   child: _Tally(
                     label: 'Approved by me',
                     value: page.approved,
-                    color: AppColors.ok,
+                    color: context.c.ok,
                     icon: Icons.check_circle_outline_rounded,
                   ),
                 ),
@@ -101,7 +101,7 @@ class MyDecisionsScreen extends ConsumerWidget {
                   child: _Tally(
                     label: 'Rejected by me',
                     value: page.rejected,
-                    color: AppColors.bad,
+                    color: context.c.bad,
                     icon: Icons.cancel_outlined,
                   ),
                 ),
@@ -129,16 +129,16 @@ class MyDecisionsScreen extends ConsumerWidget {
                       decoration: BoxDecoration(
                         color: isActive
                             ? AppColors.pink.withValues(alpha: 0.15)
-                            : AppColors.surface2,
+                            : context.c.surface2,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: isActive ? AppColors.pink : AppColors.line,
+                          color: isActive ? AppColors.pink : context.c.line,
                         ),
                       ),
                       child: Text(
                         label,
                         style: TextStyle(
-                          color: isActive ? AppColors.pink : AppColors.txt2,
+                          color: isActive ? AppColors.pink : context.c.txt2,
                           fontSize: 13,
                           fontWeight:
                               isActive ? FontWeight.w700 : FontWeight.w500,
@@ -166,7 +166,7 @@ class MyDecisionsScreen extends ConsumerWidget {
               error: (e, _) => Center(
                 child: Text('Could not load your decisions.\n$e',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppColors.bad)),
+                    style: TextStyle(color: context.c.bad)),
               ),
               data: (page) => page.decisions.isEmpty
                   ? EmptyState(
@@ -223,9 +223,9 @@ class _Tally extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text('$value',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'BricolageGrotesque',
-                      color: AppColors.txt,
+                      color: context.c.txt,
                       fontSize: 22,
                       fontWeight: FontWeight.w800,
                       height: 1.1,
@@ -233,8 +233,8 @@ class _Tally extends StatelessWidget {
                 Text(label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: AppColors.txt3, fontSize: 12)),
+                    style: TextStyle(
+                        color: context.c.txt3, fontSize: 12)),
               ],
             ),
           ),
@@ -250,7 +250,7 @@ class _DecisionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = decision.isApproved ? AppColors.ok : AppColors.bad;
+    final color = decision.isApproved ? context.c.ok : context.c.bad;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -280,8 +280,8 @@ class _DecisionRow extends StatelessWidget {
                   child: Text(
                     decision.noteNumber,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.txt3,
+                    style: TextStyle(
+                      color: context.c.txt3,
                       fontSize: 12,
                       fontFamily: 'monospace',
                     ),
@@ -289,8 +289,8 @@ class _DecisionRow extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(formatDate(decision.actedAt),
-                    style: const TextStyle(
-                        color: AppColors.txt3, fontSize: 11.5)),
+                    style: TextStyle(
+                        color: context.c.txt3, fontSize: 11.5)),
               ],
             ),
             const SizedBox(height: 8),
@@ -298,7 +298,7 @@ class _DecisionRow extends StatelessWidget {
               truncate(decision.noteObjective, 110),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.txt2, fontSize: 13.5),
+              style: TextStyle(color: context.c.txt2, fontSize: 13.5),
             ),
             if (decision.remark.isNotEmpty) ...[
               const SizedBox(height: 6),
@@ -306,8 +306,8 @@ class _DecisionRow extends StatelessWidget {
                 '“${decision.remark}”',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    color: AppColors.txt3,
+                style: TextStyle(
+                    color: context.c.txt3,
                     fontSize: 12.5,
                     fontStyle: FontStyle.italic),
               ),
@@ -328,8 +328,8 @@ class _DecisionRow extends StatelessWidget {
                 // decided: you may have approved it and a later level rejected
                 // it, or rejected it and seen it revised and approved.
                 Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Text('now: ',
-                      style: TextStyle(color: AppColors.txt3, fontSize: 11.5)),
+                  Text('now: ',
+                      style: TextStyle(color: context.c.txt3, fontSize: 11.5)),
                   StatusPill(decision.noteStatus),
                 ]),
               ],
@@ -350,12 +350,12 @@ class _Chip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
       decoration: BoxDecoration(
-        color: AppColors.surface2,
+        color: context.c.surface2,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.line2),
+        border: Border.all(color: context.c.line2),
       ),
       child: Text(text,
-          style: const TextStyle(color: AppColors.txt3, fontSize: 11.5)),
+          style: TextStyle(color: context.c.txt3, fontSize: 11.5)),
     );
   }
 }

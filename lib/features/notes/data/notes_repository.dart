@@ -220,6 +220,16 @@ class NotesRepository {
     return DecisionOutcome.fromResult(Note.fromJson(res.asMap), res.meta);
   }
 
+  /// Send the note back to its creator to revise the hierarchy and resubmit.
+  /// [remark] (the reason / what to change) is mandatory server-side.
+  Future<DecisionOutcome> reassignNote(String id, String remark) async {
+    final res = await _api.post(
+      ApiEndpoints.reassignNote(id),
+      data: {'remark': remark},
+    );
+    return DecisionOutcome.fromResult(Note.fromJson(res.asMap), res.meta);
+  }
+
   // ── Attachments ───────────────────────────────────────────────────────────
 
   /// Drafts only, initiator only — the server rejects anything else. Max 10

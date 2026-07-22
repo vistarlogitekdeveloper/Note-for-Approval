@@ -42,13 +42,13 @@ class _SmtpSettingsScreenState extends ConsumerState<SmtpSettingsScreen> {
         children: [
           Text('SMTP Settings',
               style: GoogleFonts.bricolageGrotesque(
-                color: AppColors.txt,
+                color: context.c.txt,
                 fontSize: 28,
                 fontWeight: FontWeight.w800,
                 letterSpacing: -0.5,
               )),
-          const Text('Configure the email server for approval notifications',
-              style: TextStyle(color: AppColors.txt3, fontSize: 14)),
+          Text('Configure the email server for approval notifications',
+              style: TextStyle(color: context.c.txt3, fontSize: 14)),
           const SizedBox(height: 24),
 
           VistarCard(
@@ -66,7 +66,7 @@ class _SmtpSettingsScreenState extends ConsumerState<SmtpSettingsScreen> {
                       flex: 3,
                       child: TextField(
                         controller: _hostCtrl,
-                        style: const TextStyle(color: AppColors.txt),
+                        style: TextStyle(color: context.c.txt),
                         decoration: const InputDecoration(
                           labelText: 'SMTP Host *',
                           prefixIcon: Icon(Icons.dns_outlined),
@@ -78,7 +78,7 @@ class _SmtpSettingsScreenState extends ConsumerState<SmtpSettingsScreen> {
                       flex: 1,
                       child: TextField(
                         controller: _portCtrl,
-                        style: const TextStyle(color: AppColors.txt),
+                        style: TextStyle(color: context.c.txt),
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
                           labelText: 'Port *',
@@ -94,22 +94,22 @@ class _SmtpSettingsScreenState extends ConsumerState<SmtpSettingsScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: AppColors.surface2,
+                    color: context.c.surface2,
                     borderRadius: BorderRadius.circular(11),
-                    border: Border.all(color: AppColors.line),
+                    border: Border.all(color: context.c.line),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.lock_outline, color: AppColors.txt3, size: 18),
+                      Icon(Icons.lock_outline, color: context.c.txt3, size: 18),
                       const SizedBox(width: 10),
-                      const Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text('Enable TLS/STARTTLS',
-                                style: TextStyle(color: AppColors.txt, fontSize: 14)),
+                                style: TextStyle(color: context.c.txt, fontSize: 14)),
                             Text('Recommended for production',
-                                style: TextStyle(color: AppColors.txt3, fontSize: 12)),
+                                style: TextStyle(color: context.c.txt3, fontSize: 12)),
                           ],
                         ),
                       ),
@@ -125,7 +125,7 @@ class _SmtpSettingsScreenState extends ConsumerState<SmtpSettingsScreen> {
                 // Auth
                 TextField(
                   controller: _userCtrl,
-                  style: const TextStyle(color: AppColors.txt),
+                  style: TextStyle(color: context.c.txt),
                   decoration: const InputDecoration(
                     labelText: 'Username / Email *',
                     prefixIcon: Icon(Icons.person_outline),
@@ -135,7 +135,7 @@ class _SmtpSettingsScreenState extends ConsumerState<SmtpSettingsScreen> {
                 TextField(
                   controller: _passCtrl,
                   obscureText: true,
-                  style: const TextStyle(color: AppColors.txt),
+                  style: TextStyle(color: context.c.txt),
                   decoration: const InputDecoration(
                     labelText: 'Password *',
                     prefixIcon: Icon(Icons.lock_outline),
@@ -146,7 +146,7 @@ class _SmtpSettingsScreenState extends ConsumerState<SmtpSettingsScreen> {
                 // Sender identity
                 TextField(
                   controller: _senderCtrl,
-                  style: const TextStyle(color: AppColors.txt),
+                  style: TextStyle(color: context.c.txt),
                   decoration: const InputDecoration(
                     labelText: 'Sender Identity',
                     hintText: 'Display Name <address@example.com>',
@@ -162,13 +162,13 @@ class _SmtpSettingsScreenState extends ConsumerState<SmtpSettingsScreen> {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: _testResult!.startsWith('✓')
-                          ? AppColors.ok.withValues(alpha: 0.1)
-                          : AppColors.bad.withValues(alpha: 0.1),
+                          ? context.c.ok.withValues(alpha: 0.1)
+                          : context.c.bad.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: _testResult!.startsWith('✓')
-                            ? AppColors.ok.withValues(alpha: 0.3)
-                            : AppColors.bad.withValues(alpha: 0.3),
+                            ? context.c.ok.withValues(alpha: 0.3)
+                            : context.c.bad.withValues(alpha: 0.3),
                       ),
                     ),
                     child: Row(
@@ -178,16 +178,16 @@ class _SmtpSettingsScreenState extends ConsumerState<SmtpSettingsScreen> {
                               ? Icons.check_circle_outline
                               : Icons.error_outline,
                           color: _testResult!.startsWith('✓')
-                              ? AppColors.ok
-                              : AppColors.bad,
+                              ? context.c.ok
+                              : context.c.bad,
                           size: 18,
                         ),
                         const SizedBox(width: 10),
                         Text(_testResult!,
                             style: TextStyle(
                               color: _testResult!.startsWith('✓')
-                                  ? AppColors.ok
-                                  : AppColors.bad,
+                                  ? context.c.ok
+                                  : context.c.bad,
                               fontSize: 13.5,
                             )),
                       ],

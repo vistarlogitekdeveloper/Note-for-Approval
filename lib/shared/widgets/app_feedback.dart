@@ -12,7 +12,7 @@ class AppFeedback {
   AppFeedback._();
 
   static void success(BuildContext context, String message) =>
-      _show(context, message, AppColors.ok, Icons.check_circle_outline);
+      _show(context, message, context.c.ok, Icons.check_circle_outline);
 
   /// Accepts the raw error object. [ApiException] already carries a
   /// human-readable server message via `displayMessage`; anything else is
@@ -21,11 +21,11 @@ class AppFeedback {
     final message = error is ApiException
         ? error.displayMessage
         : error.toString().replaceFirst(RegExp(r'^Exception: '), '');
-    _show(context, message, AppColors.bad, Icons.error_outline, seconds: 6);
+    _show(context, message, context.c.bad, Icons.error_outline, seconds: 6);
   }
 
   static void info(BuildContext context, String message) =>
-      _show(context, message, AppColors.info, Icons.info_outline);
+      _show(context, message, context.c.info, Icons.info_outline);
 
   static void _show(
     BuildContext context,
@@ -47,7 +47,7 @@ class AppFeedback {
         SnackBar(
           duration: Duration(seconds: seconds),
           behavior: SnackBarBehavior.floating,
-          backgroundColor: AppColors.surface2,
+          backgroundColor: context.c.surface2,
           elevation: 8,
           margin: const EdgeInsets.all(16),
           shape: RoundedRectangleBorder(
@@ -61,7 +61,7 @@ class AppFeedback {
               Expanded(
                 child: Text(
                   message,
-                  style: const TextStyle(color: AppColors.txt, fontSize: 13.5),
+                  style: TextStyle(color: context.c.txt, fontSize: 13.5),
                 ),
               ),
             ],
