@@ -6,8 +6,10 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../models/note.dart';
 import '../providers/notes_provider.dart';
+import '../../../features/auth/providers/auth_provider.dart';
 import '../../../shared/widgets/common_widgets.dart';
 import '../../../shared/widgets/gradient_button.dart';
+import '../../../shared/widgets/scope_toggle.dart';
 import '../../../shared/widgets/status_pill.dart';
 
 class MyNotesScreen extends ConsumerWidget {
@@ -17,6 +19,7 @@ class MyNotesScreen extends ConsumerWidget {
     (null, 'All'),
     ('draft', 'Drafts'),
     ('pendingApproval', 'Pending'),
+    ('returned', 'Returned'),
     ('approved', 'Approved'),
     ('rejected', 'Rejected'),
   ];
@@ -25,6 +28,10 @@ class MyNotesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final activeFilter = ref.watch(notesFilterProvider);
     final notesAsync = ref.watch(filteredNotesProvider);
+    // Only an admin gets the My/All choice; everyone else only ever sees their
+    // own notes, so the toggle is hidden and the scope stays "mine".
+    final isAdmin = ref.watch(authProvider).user?.role.canAdmin ?? false;
+    final mineOnly = !isAdmin || ref.watch(notesScopeMineProvider);
 
     return Padding(
       padding: const EdgeInsets.all(28),
@@ -37,14 +44,17 @@ class MyNotesScreen extends ConsumerWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('My Notes',
+                  Text(mineOnly ? 'My Notes' : 'All Notes',
                       style: GoogleFonts.bricolageGrotesque(
                         color: context.c.txt,
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.5,
                       )),
-                  Text('All notes you have raised',
+                  Text(
+                      mineOnly
+                          ? 'All notes you have raised'
+                          : 'Every note across the system',
                       style: TextStyle(color: context.c.txt3, fontSize: 14)),
                 ],
               ),
@@ -57,6 +67,16 @@ class MyNotesScreen extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 20),
+
+          // Scope toggle — admins only.
+          if (isAdmin) ...[
+            ScopeToggle(
+              mineOnly: ref.watch(notesScopeMineProvider),
+              onChanged: (v) =>
+                  ref.read(notesScopeMineProvider.notifier).state = v,
+            ),
+            const SizedBox(height: 16),
+          ],
 
           // Filter chips
           SingleChildScrollView(
@@ -107,8 +127,8 @@ class MyNotesScreen extends ConsumerWidget {
                       message: 'No notes found for this filter.',
                       icon: Icons.description_outlined,
                     )
-                  : _NotesTable(notes: notes),
-              loading: () => Column(
+                  : _NotesTable(notes: notes, showInitiator: !mineOnly),
+              loading: () => ListView(
                 children: List.generate(5,
                     (_) => const Padding(
                       padding: EdgeInsets.only(bottom: 10),
@@ -127,8 +147,12 @@ class MyNotesScreen extends ConsumerWidget {
 }
 
 class _NotesTable extends StatelessWidget {
-  const _NotesTable({required this.notes});
+  const _NotesTable({required this.notes, this.showInitiator = false});
   final List<Note> notes;
+
+  /// When an admin views all notes, each row needs a "Raised By" column so it
+  /// is clear whose note it is — otherwise the list is anonymous.
+  final bool showInitiator;
 
   @override
   Widget build(BuildContext context) {
@@ -148,13 +172,17 @@ class _NotesTable extends StatelessWidget {
             // in 78px of usable width, hence a 7px overflow) and 100px made
             // "View →" wrap onto two lines. Only the two free-text columns
             // flex, because they are the ones that should absorb slack.
-            columnWidths: const {
-              0: IntrinsicColumnWidth(), // Note #
-              1: FlexColumnWidth(2), // Purpose
-              2: FlexColumnWidth(3), // Objective
-              3: IntrinsicColumnWidth(), // Status pill
-              4: IntrinsicColumnWidth(), // Date
-              5: IntrinsicColumnWidth(), // Action
+            //
+            // A "Raised By" column is inserted after Note # only in all-notes
+            // mode, so the width map and cell lists are built to match.
+            columnWidths: {
+              0: const IntrinsicColumnWidth(), // Note #
+              if (showInitiator) 1: const IntrinsicColumnWidth(), // Raised By
+              (showInitiator ? 2 : 1): const FlexColumnWidth(2), // Purpose
+              (showInitiator ? 3 : 2): const FlexColumnWidth(3), // Objective
+              (showInitiator ? 4 : 3): const IntrinsicColumnWidth(), // Status
+              (showInitiator ? 5 : 4): const IntrinsicColumnWidth(), // Date
+              (showInitiator ? 6 : 5): const IntrinsicColumnWidth(), // Action
             },
             children: [
               // Header
@@ -162,6 +190,7 @@ class _NotesTable extends StatelessWidget {
                 decoration: BoxDecoration(color: context.c.surface2),
                 children: [
                   _th(context, 'Note #'),
+                  if (showInitiator) _th(context, 'Raised By'),
                   _th(context, 'Purpose'),
                   _th(context, 'Objective'),
                   _th(context, 'Status'),
@@ -189,6 +218,26 @@ class _NotesTable extends StatelessWidget {
               fontSize: 12,
               fontFamily: 'monospace',
             ))),
+        if (showInitiator)
+          _td(Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(n.initiatorName,
+                  style: TextStyle(
+                    color: context.c.txt,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+              if (n.initiatorEmail.isNotEmpty)
+                Text(n.initiatorEmail,
+                    style: TextStyle(color: context.c.txt3, fontSize: 11),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+            ],
+          )),
         _td(Text(n.purposeLabel,
             style: TextStyle(
               color: context.c.txt,

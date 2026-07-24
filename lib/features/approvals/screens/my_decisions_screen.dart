@@ -154,7 +154,11 @@ class MyDecisionsScreen extends ConsumerWidget {
 
           Expanded(
             child: async.when(
-              loading: () => Column(
+              // A ListView, not a Column: the placeholders must scroll/clip
+              // inside the bounded Expanded exactly like the loaded list does.
+              // A plain Column overflowed on short viewports (the 4 fixed cards
+              // are taller than the space when the window isn't tall).
+              loading: () => ListView(
                 children: List.generate(
                   4,
                   (_) => const Padding(

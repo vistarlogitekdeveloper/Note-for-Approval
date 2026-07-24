@@ -56,7 +56,7 @@ class MastersScreen extends ConsumerWidget {
           Expanded(
             child: purposesAsync.when(
               data: (items) => _PurposesList(items: items),
-              loading: () => Column(
+              loading: () => ListView(
                 children: List.generate(8,
                     (_) => const Padding(
                       padding: EdgeInsets.only(bottom: 8),

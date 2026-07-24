@@ -7,9 +7,9 @@ import '../../../core/utils/formatters.dart';
 import '../../../features/auth/providers/auth_provider.dart';
 import '../../../features/notes/models/note.dart';
 import '../../../features/notes/providers/notes_provider.dart';
-import '../../../shared/models/user.dart';
 import '../../../shared/widgets/common_widgets.dart';
 import '../../../shared/widgets/gradient_button.dart';
+import '../../../shared/widgets/scope_toggle.dart';
 import '../../../shared/widgets/status_pill.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -60,7 +60,35 @@ class DashboardScreen extends ConsumerWidget {
 
           // ── KPI Cards ───────────────────────────────────────────────────
           statsAsync.when(
-            data: (stats) => _KpiGrid(stats: stats, user: user),
+            data: (stats) {
+              // Admins can split the KPIs into their own notes vs everything.
+              // The toggle only appears once the server has actually returned
+              // the split, so an older backend never shows a wrong "mine".
+              //
+              // Non-admins are always mine-only: their KPI counts must reconcile
+              // with the My Notes list a card taps into (which is forced to mine
+              // for a non-admin), and their approver dimension is served by the
+              // "Pending My Action" section below — not by these status cards.
+              final isAdmin = user?.role.canAdmin ?? false;
+              final showToggle = isAdmin && stats.hasMineBreakdown;
+              final mineOnly = !isAdmin ||
+                  (showToggle && ref.watch(dashboardScopeMineProvider));
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (showToggle) ...[
+                    ScopeToggle(
+                      mineOnly: ref.watch(dashboardScopeMineProvider),
+                      onChanged: (v) => ref
+                          .read(dashboardScopeMineProvider.notifier)
+                          .state = v,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  _KpiGrid(counts: stats.scoped(mineOnly), mineOnly: mineOnly),
+                ],
+              );
+            },
             loading: () => const _KpiGridShimmer(),
             error: (e, _) => const SizedBox.shrink(),
           ),
@@ -142,13 +170,20 @@ const kpiGridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
 );
 
 class _KpiGrid extends ConsumerWidget {
-  const _KpiGrid({required this.stats, required this.user});
-  final DashboardStats stats;
-  final User? user;
+  const _KpiGrid({required this.counts, required this.mineOnly});
 
-  /// Opens My Notes already filtered to the slice this card counts, so the
-  /// number and the list the user lands on always agree.
+  /// The status breakdown for the active scope (mine or all).
+  final StatusCounts counts;
+
+  /// The scope the dashboard is currently showing, carried through to My Notes
+  /// on tap so the two views stay in step.
+  final bool mineOnly;
+
+  /// Opens My Notes in the SAME scope the dashboard is showing, filtered to the
+  /// slice this card counts, so the number and the list the user lands on
+  /// always agree.
   void _open(BuildContext context, WidgetRef ref, String? status) {
+    ref.read(notesScopeMineProvider.notifier).state = mineOnly;
     ref.read(notesFilterProvider.notifier).state = status;
     context.go('/notes');
   }
@@ -162,7 +197,7 @@ class _KpiGrid extends ConsumerWidget {
       children: [
         KpiCard(
           label: 'Total Notes',
-          value: '${stats.totalNotes}',
+          value: '${counts.total}',
           icon: Icons.description_outlined,
           color: context.c.info,
           onTap: () => _open(context, ref, null),
@@ -172,29 +207,39 @@ class _KpiGrid extends ConsumerWidget {
         // the cards beneath it and there was nothing to account for the gap.
         KpiCard(
           label: 'Drafts',
-          value: '${stats.draftNotes}',
+          value: '${counts.draft}',
           icon: Icons.edit_note_rounded,
           color: context.c.txt3,
           onTap: () => _open(context, ref, NoteStatus.draft.wireValue),
         ),
         KpiCard(
           label: 'Pending',
-          value: '${stats.pendingNotes}',
+          value: '${counts.pending}',
           icon: Icons.pending_actions_outlined,
-          color: context.c.warn,
+          color: context.c.info,
           onTap: () =>
               _open(context, ref, NoteStatus.pendingApproval.wireValue),
         ),
+        // Returned notes were sent back to their creator to revise — a real
+        // status the reassign flow produces. Without this card they'd count in
+        // "Total" but appear on no tile, and the total wouldn't reconcile.
+        KpiCard(
+          label: 'Returned',
+          value: '${counts.returned}',
+          icon: Icons.assignment_return_outlined,
+          color: context.c.warn,
+          onTap: () => _open(context, ref, NoteStatus.returned.wireValue),
+        ),
         KpiCard(
           label: 'Approved',
-          value: '${stats.approvedNotes}',
+          value: '${counts.approved}',
           icon: Icons.check_circle_outline_rounded,
           color: context.c.ok,
           onTap: () => _open(context, ref, NoteStatus.approved.wireValue),
         ),
         KpiCard(
           label: 'Rejected',
-          value: '${stats.rejectedNotes}',
+          value: '${counts.rejected}',
           icon: Icons.cancel_outlined,
           color: context.c.bad,
           onTap: () => _open(context, ref, NoteStatus.rejected.wireValue),
@@ -215,7 +260,7 @@ class _KpiGridShimmer extends StatelessWidget {
       gridDelegate: kpiGridDelegate,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      children: List.generate(5, (_) => const ShimmerCard(height: 124)),
+      children: List.generate(6, (_) => const ShimmerCard(height: 124)),
     );
   }
 }

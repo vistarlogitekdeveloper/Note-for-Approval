@@ -59,7 +59,7 @@ class UsersAdminScreen extends ConsumerWidget {
           Expanded(
             child: usersAsync.when(
               data: (users) => _UsersTable(users: users),
-              loading: () => Column(
+              loading: () => ListView(
                 children: List.generate(5,
                     (_) => const Padding(
                       padding: EdgeInsets.only(bottom: 8),

@@ -96,7 +96,7 @@ class AuditScreen extends ConsumerWidget {
           Expanded(
             child: auditAsync.when(
               data: (logs) => _AuditTable(logs: logs),
-              loading: () => Column(
+              loading: () => ListView(
                 children: List.generate(
                   5,
                   (_) => const Padding(

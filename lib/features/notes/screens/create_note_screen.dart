@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +15,55 @@ import '../../../features/auth/providers/auth_provider.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/widgets/common_widgets.dart';
 import '../../../shared/widgets/gradient_button.dart';
+
+/// Auto-save status shown next to the action buttons.
+enum _AutoSave { idle, saving, saved, error }
+
+/// The quiet "Saving… / All changes saved · 10:42" line beside the actions.
+class _AutosaveStatus extends StatelessWidget {
+  const _AutosaveStatus({required this.status, required this.at});
+  final _AutoSave status;
+  final DateTime? at;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, label, color) = switch (status) {
+      _AutoSave.idle => (null, '', context.c.txt3),
+      _AutoSave.saving => (null, 'Saving…', context.c.txt3),
+      _AutoSave.saved => (
+          Icons.cloud_done_outlined,
+          at != null
+              ? 'All changes saved · ${TimeOfDay.fromDateTime(at!).format(context)}'
+              : 'All changes saved',
+          context.c.ok,
+        ),
+      _AutoSave.error => (
+          Icons.cloud_off_outlined,
+          "Couldn't auto-save — will retry",
+          context.c.warn,
+        ),
+    };
+    if (status == _AutoSave.idle) return const SizedBox.shrink();
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (status == _AutoSave.saving)
+          SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(strokeWidth: 1.6, color: color),
+          )
+        else if (icon != null)
+          Icon(icon, size: 15, color: color),
+        const SizedBox(width: 7),
+        Text(label,
+            style: TextStyle(
+                color: color, fontSize: 12.5, fontWeight: FontWeight.w500)),
+      ],
+    );
+  }
+}
 
 class CreateNoteScreen extends ConsumerStatefulWidget {
   const CreateNoteScreen({super.key, this.editId});
@@ -92,15 +143,103 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
   /// approver — you cannot approve your own note.
   String? _initiatorId;
 
+  // ── Auto-save ─────────────────────────────────────────────────────────────
+  // Saves the draft silently a couple of seconds after the last edit, so a
+  // finished-but-unsubmitted note is never lost. It only fires once every
+  // required field is filled, because the server refuses to create a note with
+  // any of them empty — until then there is nothing it would accept. The manual
+  // "Save as Draft" and "Submit" buttons are unchanged.
+  Timer? _autosaveTimer;
+  bool _autosaveInFlight = false;
+  _AutoSave _autoStatus = _AutoSave.idle;
+
+  /// A fingerprint of the last content the server accepted, so identical
+  /// content is never re-saved (e.g. on focus changes).
+  String? _lastSavedSnapshot;
+  DateTime? _lastSavedAt;
+
+  static const _autosaveDelay = Duration(seconds: 2);
+
+  /// Every required field non-empty. Checked silently (no validation UI) so it
+  /// can gate auto-save without flashing red errors while the user types.
+  bool get _isComplete =>
+      _selectedPurposeId != null &&
+      _objectiveDetailCtrl.text.trim().isNotEmpty &&
+      _briefNoteCtrl.text.trim().isNotEmpty &&
+      _benefitCtrl.text.trim().isNotEmpty &&
+      _costImpactCtrl.text.trim().isNotEmpty;
+
+  String _formSnapshot() => [
+        _selectedPurposeId ?? '',
+        _objectiveDetailCtrl.text.trim(),
+        _briefNoteCtrl.text.trim(),
+        _benefitCtrl.text.trim(),
+        _costImpactCtrl.text.trim(),
+        _chainDirty ? _chain.map((u) => u.id).join(',') : '',
+      ].join('');
+
+  /// Debounce a save to [_autosaveDelay] after the most recent edit.
+  void _scheduleAutosave() {
+    if (!_editable) return;
+    _autosaveTimer?.cancel();
+    _autosaveTimer = Timer(_autosaveDelay, _autosave);
+  }
+
+  Future<void> _autosave() async {
+    if (!mounted || !_editable || _autosaveInFlight) return;
+    // Nothing the server would accept yet, or nothing changed since last save.
+    if (!_isComplete) return;
+    final snapshot = _formSnapshot();
+    if (snapshot == _lastSavedSnapshot) return;
+    // Don't collide with a manual Save/Submit; retry once it finishes.
+    if (ref.read(noteFormProvider).loading) {
+      _scheduleAutosave();
+      return;
+    }
+
+    setState(() {
+      _autosaveInFlight = true;
+      _autoStatus = _AutoSave.saving;
+    });
+    try {
+      final repo = ref.read(notesRepositoryProvider);
+      final data = _buildData();
+      final note = _noteId == null
+          ? await repo.createNote(data)
+          : await repo.updateNote(_noteId!, data);
+      if (!mounted) return;
+      setState(() {
+        _noteId = note.id;
+        _status ??= note.status; // a brand-new note is now a draft
+        _lastSavedSnapshot = snapshot;
+        _lastSavedAt = DateTime.now();
+        _autoStatus = _AutoSave.saved;
+        _autosaveInFlight = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      // Stay quiet and let the next edit retry; the manual buttons still work.
+      setState(() {
+        _autoStatus = _AutoSave.error;
+        _autosaveInFlight = false;
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _noteId = widget.editId;
+    // Any keystroke in a required text field re-arms the auto-save debounce.
+    for (final c in [_objectiveDetailCtrl, _briefNoteCtrl, _benefitCtrl, _costImpactCtrl]) {
+      c.addListener(_scheduleAutosave);
+    }
     if (_isEdit) _loadNote();
   }
 
   @override
   void dispose() {
+    _autosaveTimer?.cancel();
     _objectiveDetailCtrl.dispose();
     _briefNoteCtrl.dispose();
     _benefitCtrl.dispose();
@@ -153,6 +292,9 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
         _chainDirty = false;
         _loading = false;
       });
+      // Loading populated the fields (which fires the listeners); record the
+      // baseline so we don't immediately re-save identical, just-loaded content.
+      _lastSavedSnapshot = _formSnapshot();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -277,6 +419,7 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
       _chain.add(chosen);
       _chainDirty = true;
     });
+    _scheduleAutosave();
   }
 
   Future<void> _removeExisting(NoteAttachment attachment) async {
@@ -455,6 +598,7 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                                   _selectedPurposeLabel =
                                       active.firstWhere((p) => p.id == v).name;
                                 });
+                                _scheduleAutosave();
                               },
                       );
                     },
@@ -550,18 +694,24 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                     enabled: _editable && !formState.loading,
                     lockedCount: _lockedCount,
                     onAdd: _addApprover,
-                    onRemove: (i) => setState(() {
+                    onRemove: (i) {
                       if (i < _lockedCount) return; // locked — approved already
-                      _chain.removeAt(i);
-                      _chainDirty = true;
-                    }),
-                    onMove: (from, to) => setState(() {
+                      setState(() {
+                        _chain.removeAt(i);
+                        _chainDirty = true;
+                      });
+                      _scheduleAutosave();
+                    },
+                    onMove: (from, to) {
                       // Never move into or out of the locked approved prefix.
                       if (from < _lockedCount || to < _lockedCount) return;
-                      final u = _chain.removeAt(from);
-                      _chain.insert(to, u);
-                      _chainDirty = true;
-                    }),
+                      setState(() {
+                        final u = _chain.removeAt(from);
+                        _chain.insert(to, u);
+                        _chainDirty = true;
+                      });
+                      _scheduleAutosave();
+                    },
                   ),
                   const SizedBox(height: 24),
 
@@ -581,8 +731,9 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
 
                   // Actions
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
+                      if (_editable) _AutosaveStatus(status: _autoStatus, at: _lastSavedAt),
+                      const Spacer(),
                       GhostButton(
                         label: 'Cancel',
                         onPressed: () => context.go('/notes'),
@@ -591,16 +742,22 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                       GhostButton(
                         label: formState.loading ? 'Saving…' : 'Save as Draft',
                         icon: Icons.save_outlined,
-                        onPressed: !_editable || formState.loading
+                        // Disabled during an in-flight auto-save too, so a click
+                        // can't race the auto-create and make a second note.
+                        onPressed: !_editable || formState.loading || _autosaveInFlight
                             ? null
                             : () async {
+                                _autosaveTimer?.cancel();
                                 if (!_formKey.currentState!.validate()) return;
                                 final note = await notifier.saveDraft(
                                   _buildData(),
                                   editId: _noteId,
                                   attachments: List.of(_staged),
                                 );
-                                if (note != null && mounted) await _afterSave(note);
+                                if (note != null && mounted) {
+                                  _lastSavedSnapshot = _formSnapshot();
+                                  await _afterSave(note);
+                                }
                               },
                       ),
                       const SizedBox(width: 12),
@@ -610,9 +767,10 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                             : 'Submit for Approval',
                         icon: Icons.send_rounded,
                         loading: formState.loading,
-                        onPressed: !_editable
+                        onPressed: !_editable || _autosaveInFlight
                             ? null
                             : () async {
+                                _autosaveTimer?.cancel();
                                 if (!_formKey.currentState!.validate()) return;
                                 final note = await notifier.submit(
                                   _buildData(),

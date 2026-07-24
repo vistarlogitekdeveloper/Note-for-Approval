@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
+import '../../../features/auth/providers/auth_provider.dart';
 import '../../../shared/models/user.dart';
 
 // Every list below is `autoDispose`, and that is load-bearing rather than
@@ -46,6 +47,12 @@ final dashboardStatsProvider =
   return ref.read(notesRepositoryProvider).getDashboardStats();
 });
 
+// Which KPI breakdown the dashboard shows, for admins. false = all visible (the
+// system-overview default), true = only notes I raised. The stats response
+// already carries both scopes, so flipping this just re-reads the cached object
+// — no network round-trip.
+final dashboardScopeMineProvider = StateProvider<bool>((ref) => false);
+
 // ── Recent notes (for dashboard) ─────────────────────────────────────────────
 final recentNotesProvider =
     FutureProvider.autoDispose<List<Note>>((ref) async {
@@ -67,10 +74,27 @@ final selectableApproversProvider =
 // ── Notes filter (for My Notes list) ─────────────────────────────────────────
 final notesFilterProvider = StateProvider<String?>((ref) => null);
 
+// Scope of the My Notes list. true = only notes I raised (the default, and the
+// only scope a non-admin ever has); false = every note I'm allowed to see,
+// which for an admin is all notes in the system. The server enforces this — an
+// admin's `mine:false` resolves to an empty visibility filter (everything),
+// a non-admin's to just the notes they're a party to.
+final notesScopeMineProvider = StateProvider<bool>((ref) => true);
+
 final filteredNotesProvider =
     FutureProvider.autoDispose<List<Note>>((ref) async {
   final filter = ref.watch(notesFilterProvider);
-  return ref.read(notesRepositoryProvider).getMyNotes(status: filter);
+  // The `!isAdmin` guard lives HERE so it can't diverge from the screen: a
+  // non-admin is always mine-only regardless of what the scope flag says (it
+  // could have been flipped to false by a dashboard KPI tap, which is
+  // admin-oriented). Without this, a non-admin could fetch all-visible notes
+  // under a "My Notes" header with no toggle to escape.
+  final isAdmin = ref.watch(authProvider).user?.role.canAdmin ?? false;
+  final mineOnly = !isAdmin || ref.watch(notesScopeMineProvider);
+  final repo = ref.read(notesRepositoryProvider);
+  if (mineOnly) return repo.getMyNotes(status: filter);
+  final page = await repo.getNotes(mine: false, status: filter);
+  return page.notes;
 });
 
 // ── Create/Edit note form state ───────────────────────────────────────────────

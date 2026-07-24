@@ -84,7 +84,7 @@ class HierarchyScreen extends ConsumerWidget {
           Expanded(
             child: hierarchyAsync.when(
               data: (roles) => _HierarchyList(roles: roles),
-              loading: () => Column(
+              loading: () => ListView(
                 children: List.generate(8,
                     (_) => const Padding(
                       padding: EdgeInsets.only(bottom: 10),

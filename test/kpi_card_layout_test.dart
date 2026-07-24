@@ -94,7 +94,7 @@ void main() {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           children: [
-            for (final label in ['Total Notes', 'Drafts', 'Pending', 'Approved', 'Rejected'])
+            for (final label in ['Total Notes', 'Drafts', 'Pending', 'Returned', 'Approved', 'Rejected'])
               KpiCard(
                 label: label,
                 value: '0',
@@ -108,12 +108,12 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    for (final label in ['Total Notes', 'Drafts', 'Pending', 'Approved', 'Rejected']) {
+    for (final label in ['Total Notes', 'Drafts', 'Pending', 'Returned', 'Approved', 'Rejected']) {
       await tester.tap(find.text(label));
       await tester.pump();
     }
     expect(tapped,
-        ['Total Notes', 'Drafts', 'Pending', 'Approved', 'Rejected']);
+        ['Total Notes', 'Drafts', 'Pending', 'Returned', 'Approved', 'Rejected']);
   });
 
   testWidgets('a card without onTap stays inert', (tester) async {

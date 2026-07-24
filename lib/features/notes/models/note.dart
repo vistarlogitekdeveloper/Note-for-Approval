@@ -429,42 +429,92 @@ class PurposeMaster {
       );
 }
 
+/// A per-status note count for one scope. `pendingApproval` on the wire maps to
+/// [pending] here.
+class StatusCounts {
+  const StatusCounts({
+    this.total = 0,
+    this.draft = 0,
+    this.pending = 0,
+    this.approved = 0,
+    this.rejected = 0,
+    this.returned = 0,
+  });
+
+  final int total;
+  final int draft;
+  final int pending;
+  final int approved;
+  final int rejected;
+  final int returned;
+
+  factory StatusCounts.fromJson(Map<String, dynamic> j) => StatusCounts(
+        total: (j['total'] as num?)?.toInt() ?? 0,
+        draft: (j['draft'] as num?)?.toInt() ?? 0,
+        pending: (j['pendingApproval'] as num?)?.toInt() ?? 0,
+        approved: (j['approved'] as num?)?.toInt() ?? 0,
+        rejected: (j['rejected'] as num?)?.toInt() ?? 0,
+        returned: (j['returned'] as num?)?.toInt() ?? 0,
+      );
+}
+
 class DashboardStats {
-  final int totalNotes;
-  final int pendingNotes;
-  final int approvedNotes;
-  final int rejectedNotes;
-  final int draftNotes;
-  final int pendingMyAction; // approvers: awaiting my level
-  final int raisedByMe;
-
-  /// `all` for admins, otherwise `visible-to-me` — the counts are scoped to
-  /// match what `GET /notes` would return for this caller.
-  final String scope;
-
   const DashboardStats({
-    required this.totalNotes,
-    required this.pendingNotes,
-    required this.approvedNotes,
-    required this.rejectedNotes,
-    required this.draftNotes,
-    required this.pendingMyAction,
-    this.raisedByMe = 0,
+    required this.all,
+    required this.mine,
+    this.pendingMyAction = 0,
+    this.isAdmin = false,
+    this.hasMineBreakdown = false,
     this.scope = 'visible-to-me',
   });
 
+  /// Counts for the caller's visible scope — everything for an admin, the
+  /// notes they are a party to for anyone else.
+  final StatusCounts all;
+
+  /// Counts for just the notes this user raised.
+  final StatusCounts mine;
+
+  /// Notes awaiting THIS user's decision. Independent of the my/all toggle.
+  final int pendingMyAction;
+
+  final bool isAdmin;
+
+  /// Whether the server split out the `mine` breakdown. When false (an older
+  /// backend), [mine] falls back to [all] and the my/all toggle is not offered,
+  /// so the dashboard never shows a wrong split.
+  final bool hasMineBreakdown;
+
+  /// `all` for admins, otherwise `visible-to-me`.
+  final String scope;
+
   bool get isGlobalScope => scope == 'all';
 
-  factory DashboardStats.fromJson(Map<String, dynamic> j) => DashboardStats(
-        totalNotes: (j['total'] as num?)?.toInt() ?? 0,
-        pendingNotes: (j['pendingApproval'] as num?)?.toInt() ?? 0,
-        approvedNotes: (j['approved'] as num?)?.toInt() ?? 0,
-        rejectedNotes: (j['rejected'] as num?)?.toInt() ?? 0,
-        draftNotes: (j['draft'] as num?)?.toInt() ?? 0,
-        pendingMyAction: (j['myPendingApprovals'] as num?)?.toInt() ?? 0,
-        raisedByMe: (j['raisedByMe'] as num?)?.toInt() ?? 0,
-        scope: j['scope'] as String? ?? 'visible-to-me',
-      );
+  /// The breakdown to display for a scope choice.
+  StatusCounts scoped(bool mineOnly) => mineOnly ? mine : all;
+
+  // Backward-compatible flat accessors for the visible scope.
+  int get totalNotes => all.total;
+  int get pendingNotes => all.pending;
+  int get approvedNotes => all.approved;
+  int get rejectedNotes => all.rejected;
+  int get draftNotes => all.draft;
+  int get raisedByMe => mine.total;
+
+  factory DashboardStats.fromJson(Map<String, dynamic> j) {
+    final all = StatusCounts.fromJson(j); // flat top-level = visible scope
+    final mineJson = (j['mine'] as Map?)?.cast<String, dynamic>();
+    return DashboardStats(
+      all: all,
+      // Fall back to the visible scope when the server didn't split, so a card
+      // never renders a misleading zero; the toggle stays hidden in that case.
+      mine: mineJson != null ? StatusCounts.fromJson(mineJson) : all,
+      pendingMyAction: (j['myPendingApprovals'] as num?)?.toInt() ?? 0,
+      isAdmin: j['isAdmin'] as bool? ?? false,
+      hasMineBreakdown: mineJson != null,
+      scope: j['scope'] as String? ?? 'visible-to-me',
+    );
+  }
 }
 
 /// A page of notes plus the server's pagination counters.

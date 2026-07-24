@@ -66,7 +66,7 @@ class PendingApprovalsScreen extends ConsumerWidget {
                       icon: Icons.task_alt_rounded,
                     )
                   : _ApprovalGrid(notes: notes),
-              loading: () => Column(
+              loading: () => ListView(
                 children: List.generate(
                   3,
                   (_) => const Padding(
