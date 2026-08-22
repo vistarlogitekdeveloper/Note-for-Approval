@@ -647,7 +647,7 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                       maxLines: null,
                       enabled: _editable,
                       decoration: const InputDecoration(
-                        labelText: 'Expected Benefit *',
+                        labelText: 'Expected Benefit / Loss *',
                         prefixIcon: Icon(Icons.trending_up_rounded),
                         alignLabelWithHint: true,
                       ),

@@ -524,7 +524,7 @@ class _NoteInfoCard extends StatelessWidget {
           const SizedBox(height: 12),
           _InfoRow('Brief Note', note.briefNote, multiLine: true),
           const SizedBox(height: 12),
-          _InfoRow('Expected Benefit', note.benefit, multiLine: true),
+          _InfoRow('Expected Benefit / Loss', note.benefit, multiLine: true),
           const SizedBox(height: 12),
           _InfoRow('Cost Impact', note.costImpact, multiLine: true),
         ],
