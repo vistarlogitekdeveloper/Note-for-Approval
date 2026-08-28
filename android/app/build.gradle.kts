@@ -6,7 +6,11 @@ plugins {
 
 android {
     namespace = "com.vistar.note_approval"
-    compileSdk = flutter.compileSdkVersion
+    // Pinned to 36 (not flutter.compileSdkVersion, which resolves to 34 here):
+    // file_picker's transitive dep flutter_plugin_android_lifecycle now requires
+    // apps compiling against it to use compileSdk 36+. compileSdk only widens the
+    // APIs available at build time; runtime behaviour is governed by targetSdk.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
