@@ -33,6 +33,6 @@ flutter build web \
   --release \
   --pwa-strategy=none \
   --no-web-resources-cdn \
-  --dart-define=API_BASE_URL="${API_BASE_URL:-https://vistar-crm.onrender.com/api/v1/note-for-approval}"
+  --dart-define=API_BASE_URL="${API_BASE_URL:-https://api.vistarlogitek.com/api/v1/note-for-approval}"
 
 echo "==> Built build/web"

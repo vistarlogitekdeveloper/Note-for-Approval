@@ -11,7 +11,7 @@ import 'api_exception.dart';
 ///   flutter run --dart-define=API_BASE_URL=http://localhost:3000/api/v1/note-for-approval
 const _baseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'https://vistar-crm.onrender.com/api/v1/note-for-approval',
+  defaultValue: 'https://api.vistarlogitek.com/api/v1/note-for-approval',
 );
 
 const _kAccessToken = 'access_token';
@@ -220,7 +220,8 @@ class ApiClient {
           response: res,
         ));
       }
-      return ApiResult(body['data'], (body['meta'] as Map?)?.cast<String, dynamic>());
+      return ApiResult(
+          body['data'], (body['meta'] as Map?)?.cast<String, dynamic>());
     }
     // Nothing else on this API is un-enveloped; pass it through rather than
     // guess.
