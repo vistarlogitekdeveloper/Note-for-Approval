@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../telemetry/telemetry.dart';
 import 'api_exception.dart';
 
 /// Override for local work:
@@ -13,6 +14,9 @@ const _baseUrl = String.fromEnvironment(
   'API_BASE_URL',
   defaultValue: 'https://api.vistarlogitek.com/api/v1/note-for-approval',
 );
+
+/// The API base URL this build talks to (usage analytics reports to its host).
+const apiBaseUrl = _baseUrl;
 
 const _kAccessToken = 'access_token';
 const _kRefreshToken = 'refresh_token';
@@ -83,6 +87,9 @@ class ApiClient {
         }
       },
     ));
+    // Usage analytics: named actions and failed calls. Changes nothing about
+    // the request or its handling (core/telemetry/telemetry.dart).
+    _dio.interceptors.add(TelemetryInterceptor());
   }
 
   late final Dio _dio;

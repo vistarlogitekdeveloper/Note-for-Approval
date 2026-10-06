@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/telemetry/telemetry.dart';
 import '../../../shared/models/user.dart';
 import '../data/auth_repository.dart';
 
@@ -45,6 +46,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> _init() async {
     try {
       final user = await _repo.getMe();
+      // Usage analytics (not awaited): a restored session is a sign-in,
+      // before the state change so the first screen is already theirs.
+      _identify(user);
       state = AuthState(initializing: false, user: user);
     } catch (_) {
       state = const AuthState(initializing: false);
@@ -54,10 +58,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> login(String email, String password) async {
     state = state.copyWith(initializing: false, error: null);
     final result = await _repo.login(email: email, password: password);
+    // Usage analytics (not awaited): before the state change, so the screen it
+    // leads to is already theirs.
+    _identify(result.user);
     state = AuthState(initializing: false, user: result.user);
   }
 
   Future<void> logout() async {
+    // Usage analytics: not awaited, sign-out never waits for it.
+    Telemetry.signedOut();
     await _repo.logout();
     state = const AuthState(initializing: false);
   }
@@ -66,8 +75,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// already cleared by then, so this only has to reset the UI.
   void handleSessionExpired() {
     if (!mounted) return;
+    // An expired session is a sign-out too (not awaited).
+    if (state.isAuthenticated) Telemetry.signedOut();
     state = const AuthState(initializing: false);
   }
+
+  /// Usage analytics: who this is (user id and role only). Fire and forget.
+  void _identify(User user) =>
+      Telemetry.signedIn(userId: user.id, role: user.role.name);
 
   Future<void> refresh() async {
     try {

@@ -24,6 +24,23 @@ git config --global --add safe.directory "${FLUTTER_HOME}" || true
 flutter --version
 flutter pub get
 
+DART_DEFINES=(--dart-define=API_BASE_URL="${API_BASE_URL:-https://api.vistarlogitek.com/api/v1/note-for-approval}")
+
+# Usage analytics (lib/core/telemetry/telemetry.dart). On only when BOTH build
+# variables are set - ET_APP_ID (nfa_app) and ET_WRITE_KEY (encrypted) - under
+# Settings -> Build -> Variables and secrets. Either missing: no define is
+# passed and the app sends nothing, exactly as before. ET_BASE_URL is optional
+# (events go to the API host by default). Never echo the key.
+if [ -n "${ET_APP_ID:-}" ] && [ -n "${ET_WRITE_KEY:-}" ]; then
+  DART_DEFINES+=(--dart-define=ET_APP_ID="${ET_APP_ID}" --dart-define=ET_WRITE_KEY="${ET_WRITE_KEY}")
+  if [ -n "${ET_BASE_URL:-}" ]; then
+    DART_DEFINES+=(--dart-define=ET_BASE_URL="${ET_BASE_URL}")
+  fi
+  echo "==> Usage analytics on, as ${ET_APP_ID}"
+else
+  echo "==> Usage analytics off (ET_APP_ID / ET_WRITE_KEY not set)"
+fi
+
 # --pwa-strategy=none   no service worker is generated or registered, so a
 #                       deploy can never be masked by an offline cache.
 # --no-web-resources-cdn  self-host CanvasKit instead of pulling it from
@@ -33,6 +50,6 @@ flutter build web \
   --release \
   --pwa-strategy=none \
   --no-web-resources-cdn \
-  --dart-define=API_BASE_URL="${API_BASE_URL:-https://api.vistarlogitek.com/api/v1/note-for-approval}"
+  "${DART_DEFINES[@]}"
 
 echo "==> Built build/web"
