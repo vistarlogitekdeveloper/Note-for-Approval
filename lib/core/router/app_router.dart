@@ -16,11 +16,12 @@ import '../../features/admin/screens/masters_screen.dart';
 import '../../features/admin/screens/audit_screen.dart';
 import '../../features/shell/app_shell.dart';
 import '../../shared/widgets/vistar_brand.dart';
+import '../telemetry/telemetry.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authProvider);
 
-  return GoRouter(
+  final router = GoRouter(
     initialLocation: '/dashboard',
     redirect: (context, state) {
       final loc = state.matchedLocation;
@@ -159,7 +160,30 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
+  return _withScreenViews(ref, router);
 });
+
+/// Reports each screen the router shows to usage analytics (by route
+/// pattern; see Telemetry.screen).
+GoRouter _withScreenViews(Ref ref, GoRouter router) {
+  if (!Telemetry.enabled) return router;
+  // The delegate, not the route-information provider: it also hears the
+  // location changes a redirect makes (sign-in landing on the dashboard).
+  void report() {
+    try {
+      Telemetry.screen(
+          router.routerDelegate.currentConfiguration.uri.toString());
+    } catch (_) {
+      // No configuration yet; the next change reports.
+    }
+  }
+
+  router.routerDelegate.addListener(report);
+  ref.onDispose(() => router.routerDelegate.removeListener(report));
+  // The listener only hears changes: report the starting screen too.
+  WidgetsBinding.instance.addPostFrameCallback((_) => report());
+  return router;
+}
 
 class _AuthListenable extends ChangeNotifier {
   _AuthListenable(this._ref) {

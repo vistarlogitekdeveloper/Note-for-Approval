@@ -38,6 +38,43 @@ The API the portal talks to is baked in at build time. Override it by setting
 passes it through as a `--dart-define`. It is compiled into the JS bundle, so
 it is public — never put a secret there.
 
+### Usage analytics (event tracker)
+
+`lib/core/telemetry/telemetry.dart`, using the in-house `vistar_event_tracker`
+SDK (vendored in `packages/`, see its `VENDORED.md`). Read in the Platform
+Console under Analytics > Event tracker; register the app there (Settings >
+Event tracker) as `nfa_app` to get its write key.
+
+**Off unless the build gets both `ET_APP_ID` and `ET_WRITE_KEY`.** Without
+them nothing is initialised, the telemetry code is tree-shaken out of the web
+build and the portal behaves exactly as before.
+
+- **Live web app.** To switch analytics on, add two build variables to the
+  `note-for-approval` Worker (Settings > Build > Variables and secrets):
+  `ET_APP_ID` = `nfa_app` and `ET_WRITE_KEY` (encrypted; paste the values with
+  no leading space or newline), then redeploy. `build.sh` passes them to
+  `flutter build web` only when both are set and logs
+  `Usage analytics on, as nfa_app` (or `off`). If the dashboard's build
+  command is ever replaced by an inline one, append
+  `--dart-define=ET_APP_ID=$ET_APP_ID --dart-define=ET_WRITE_KEY=$ET_WRITE_KEY`
+  to its `flutter build web` instead.
+- **APK / other builds.** Add
+  `--dart-define=ET_APP_ID=nfa_app --dart-define=ET_WRITE_KEY=wk_...`.
+
+Events go to the host of `API_BASE_URL` (a UAT build reports to UAT);
+`ET_BASE_URL` overrides it.
+
+Sent: screen views by route pattern (`/notes/:id/edit`), sign-in / sign-out
+(the user as `nfa:<user id>` with their role only), named actions from
+successful API writes (`note_created`, `note_submitted`, `note_approved`,
+`note_rejected`, `note_returned`, ... see `_actions`), failed API calls
+(5xx / no connection: endpoint pattern, method, status) and client errors
+(error type only). Never sent: request or response bodies, error messages,
+note titles, bodies or numbers, amounts, remarks, attachment names, approver
+or user names, emails. Nothing is awaited by a screen, a note, an approval, a
+sign-in or a sign-out; start-up waits at most 2 s; the event queue is capped at
+200 in shared preferences.
+
 ### Why a deploy is visible immediately
 
 Two things normally make a Flutter web app serve stale code after a deploy, and

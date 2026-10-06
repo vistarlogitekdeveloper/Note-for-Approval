@@ -5,12 +5,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/constants/app_strings.dart';
 import 'core/router/app_router.dart';
+import 'core/telemetry/telemetry.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   usePathUrlStrategy();
+  // Usage analytics: off unless the build carries ET_APP_ID + ET_WRITE_KEY
+  // (lib/core/telemetry/telemetry.dart). Waits at most 2 s, never throws.
+  await Telemetry.init();
   // Loaded before runApp so the persisted theme choice is known synchronously
   // at first build — no flash of the wrong theme.
   final prefs = await SharedPreferences.getInstance();
