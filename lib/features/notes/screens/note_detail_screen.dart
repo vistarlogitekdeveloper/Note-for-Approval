@@ -10,6 +10,7 @@ import '../../../features/auth/providers/auth_provider.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
 import '../providers/notes_provider.dart';
+import '../widgets/note_text_view.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/widgets/app_feedback.dart';
 import '../../../shared/widgets/common_widgets.dart';
@@ -554,7 +555,8 @@ class _InfoRow extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.4)),
             const SizedBox(height: 4),
-            Text(value,
+            // Tables pasted into the note show as tables.
+            NoteTextView(value,
                 style: TextStyle(
                     color: context.c.txt, fontSize: 14, height: 1.6)),
           ],

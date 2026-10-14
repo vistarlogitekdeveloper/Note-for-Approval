@@ -11,6 +11,8 @@ import '../../../core/utils/formatters.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
 import '../providers/notes_provider.dart';
+import '../utils/note_blocks.dart';
+import '../widgets/brief_note_field.dart';
 import '../../../features/auth/providers/auth_provider.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/widgets/common_widgets.dart';
@@ -166,13 +168,14 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
       _selectedPurposeId != null &&
       _objectiveDetailCtrl.text.trim().isNotEmpty &&
       _briefNoteCtrl.text.trim().isNotEmpty &&
+      _briefNoteCtrl.text.length <= _maxBriefNote &&
       _benefitCtrl.text.trim().isNotEmpty &&
       _costImpactCtrl.text.trim().isNotEmpty;
 
   String _formSnapshot() => [
         _selectedPurposeId ?? '',
         _objectiveDetailCtrl.text.trim(),
-        _briefNoteCtrl.text.trim(),
+        trimNote(_briefNoteCtrl.text),
         _benefitCtrl.text.trim(),
         _costImpactCtrl.text.trim(),
         _chainDirty ? _chain.map((u) => u.id).join(',') : '',
@@ -323,7 +326,7 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
         'purposeId': _selectedPurposeId,
         'purposeLabel': _selectedPurposeLabel,
         'objectiveInDetail': _objectiveDetailCtrl.text.trim(),
-        'briefNote': _briefNoteCtrl.text.trim(),
+        'briefNote': trimNote(_briefNoteCtrl.text),
         'benefit': _benefitCtrl.text.trim(),
         'costImpact': _costImpactCtrl.text.trim(),
         // Only sent when touched. An untouched chain must not be transmitted:
@@ -622,8 +625,9 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Brief Note (max 5000 chars)
-                  _CharLimitField(
+                  // Brief Note (max 5000 chars). Takes tables pasted from
+                  // Excel / Teams and keeps them as tables.
+                  BriefNoteField(
                     controller: _briefNoteCtrl,
                     label: 'Brief Note *',
                     maxChars: _maxBriefNote,
