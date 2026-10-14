@@ -32,6 +32,10 @@ class AuthRepository {
     );
   }
 
+  /// Whether a session was left on this device at all — no network involved.
+  Future<bool> hasStoredSession() async =>
+      await _api.readAccessToken() != null || await _api.readRefreshToken() != null;
+
   /// Unlike login, `/auth/me` returns the user as `data` itself rather than
   /// nesting it under `data.user`.
   Future<User> getMe() async {

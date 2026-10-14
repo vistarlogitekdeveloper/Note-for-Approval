@@ -187,6 +187,14 @@ class MyDecision {
 
   bool get isApproved => action == 'approved';
 
+  /// Sent back to the creator for revision — neither approved nor rejected.
+  bool get isReassigned => action == 'reassigned';
+
+  /// While the note is back with its creator (or a draft again), the server
+  /// shows it to them alone; opening it from here would only say "no access".
+  bool get noteOpenable =>
+      noteStatus != NoteStatus.returned && noteStatus != NoteStatus.draft;
+
   /// True when the note moved on after this decision — you rejected it and it
   /// was revised, or you approved it and a later level rejected it.
   bool get outcomeDiffers =>
@@ -218,13 +226,19 @@ class MyDecisionPage {
     required this.decisions,
     required this.approved,
     required this.rejected,
+    this.reassigned = 0,
     required this.total,
   });
 
   final List<MyDecision> decisions;
   final int approved;
   final int rejected;
+
+  /// Notes this user sent back for revision.
+  final int reassigned;
   final int total;
+
+  int get decided => approved + rejected + reassigned;
 
   factory MyDecisionPage.fromResult(
     List<MyDecision> decisions,
@@ -233,6 +247,7 @@ class MyDecisionPage {
       MyDecisionPage(
         decisions: decisions,
         approved: (meta?['approved'] as num?)?.toInt() ?? 0,
+        reassigned: (meta?['reassigned'] as num?)?.toInt() ?? 0,
         rejected: (meta?['rejected'] as num?)?.toInt() ?? 0,
         total: (meta?['total'] as num?)?.toInt() ?? decisions.length,
       );

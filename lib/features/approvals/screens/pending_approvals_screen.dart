@@ -16,9 +16,10 @@ class PendingApprovalsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final approvalsAsync = ref.watch(pendingApprovalsProvider);
+    final compact = MediaQuery.sizeOf(context).width < 600;
 
     return Padding(
-      padding: const EdgeInsets.all(28),
+      padding: EdgeInsets.all(compact ? 16 : 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -48,11 +49,21 @@ class PendingApprovalsScreen extends ConsumerWidget {
               // A queue fills up while you are looking at it, and nothing
               // pushes to the client — without this the only way to see a new
               // note is to navigate away and back.
-              GhostButton(
-                label: 'Refresh',
-                icon: Icons.refresh_rounded,
-                onPressed: () => ref.invalidate(pendingApprovalsProvider),
-              ),
+              compact
+                  ? IconButton(
+                      tooltip: 'Refresh',
+                      icon: const Icon(Icons.refresh_rounded),
+                      onPressed: () => ref
+                        ..invalidate(pendingApprovalsProvider)
+                        ..invalidate(pendingMyActionCountProvider),
+                    )
+                  : GhostButton(
+                      label: 'Refresh',
+                      icon: Icons.refresh_rounded,
+                      onPressed: () => ref
+                        ..invalidate(pendingApprovalsProvider)
+                        ..invalidate(pendingMyActionCountProvider),
+                    ),
             ],
           ),
           const SizedBox(height: 24),
@@ -75,10 +86,7 @@ class PendingApprovalsScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-              error: (e, _) => Center(
-                child: Text('Error: $e',
-                    style: TextStyle(color: context.c.bad)),
-              ),
+              error: (e, _) => ErrorState(error: e, onRetry: () => ref.invalidate(pendingApprovalsProvider)),
             ),
           ),
         ],
@@ -112,7 +120,11 @@ class _ApprovalCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          // A Wrap: number, level and age do not fit on one line on a phone.
+          Wrap(
+            spacing: 10,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -129,10 +141,8 @@ class _ApprovalCard extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
               LevelPill(
                   current: note.currentLevel, total: note.totalLevels),
-              const Spacer(),
               Text(
                 timeAgo(note.updatedAt),
                 style:
@@ -163,22 +173,22 @@ class _ApprovalCard extends StatelessWidget {
               Icon(Icons.person_outline,
                   size: 14, color: context.c.txt3),
               const SizedBox(width: 6),
-              Text(
-                note.initiatorName,
-                style: TextStyle(
-                    color: context.c.txt3, fontSize: 12.5),
-              ),
-              const Spacer(),
-              GhostButton(
-                label: 'Reject',
-                small: true,
-                danger: true,
-                onPressed: () => context.go('/notes/${note.id}'),
+              Expanded(
+                child: Text(
+                  note.initiatorName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: context.c.txt3, fontSize: 12.5),
+                ),
               ),
               const SizedBox(width: 10),
+              // One action, honestly named. A decision needs the note read and
+              // a remark written, which happens on the note itself — the old
+              // "Reject" here only opened the note, same as "Approve".
               GradientButton(
-                label: 'Review & Approve',
-                icon: Icons.check_rounded,
+                label: 'Review',
+                icon: Icons.arrow_forward_rounded,
                 small: true,
                 onPressed: () => context.go('/notes/${note.id}'),
               ),

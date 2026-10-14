@@ -14,32 +14,64 @@ import '../../features/admin/screens/admin_screen.dart';
 import '../../features/admin/screens/users_screen.dart';
 import '../../features/admin/screens/masters_screen.dart';
 import '../../features/admin/screens/audit_screen.dart';
+import '../../features/admin/screens/smtp_settings_screen.dart';
 import '../../features/shell/app_shell.dart';
 import '../../shared/widgets/vistar_brand.dart';
 import '../telemetry/telemetry.dart';
 
-final routerProvider = Provider<GoRouter>((ref) {
-  final auth = ref.watch(authProvider);
+/// Where to go once the splash or the sign-in is out of the way: the page the
+/// user asked for (a reload, a bookmarked or e-mailed note link), carried in
+/// `?from=`. Only an in-app path is accepted.
+String _landing(GoRouterState state) {
+  final from = state.uri.queryParameters['from'];
+  if (from == null || !from.startsWith('/') || from.startsWith('//')) {
+    return '/dashboard';
+  }
+  if (from.startsWith('/login') || from.startsWith('/splash')) return '/dashboard';
+  return from;
+}
 
+/// [loc] with its query, ready to be carried in `?from=`.
+String _withFrom(String target, GoRouterState state) {
+  final here = state.uri.toString();
+  if (here == '/' || here.startsWith('/login') || here.startsWith('/splash')) {
+    return target;
+  }
+  return Uri(path: target, queryParameters: {'from': here}).toString();
+}
+
+final routerProvider = Provider<GoRouter>((ref) {
+  // Read, never watch: the router must be built once. Rebuilding it on every
+  // auth change threw away the navigation stack and every open screen's state
+  // — a failed sign-in cleared the form and its error message, and signing in
+  // always landed on the dashboard. Auth changes reach the redirect through
+  // refreshListenable instead.
   final router = GoRouter(
     initialLocation: '/dashboard',
     redirect: (context, state) {
+      final auth = ref.read(authProvider);
       final loc = state.matchedLocation;
 
       // Handle loading splash/initializing state
       if (auth.initializing) {
-        return loc == '/splash' ? null : '/splash';
+        return loc == '/splash' ? null : _withFrom('/splash', state);
       }
 
       final isAuthed = auth.isAuthenticated;
 
       if (loc == '/splash') {
-        return isAuthed ? '/dashboard' : '/login';
+        if (!isAuthed) {
+          final from = state.uri.queryParameters['from'];
+          return from == null
+              ? '/login'
+              : Uri(path: '/login', queryParameters: {'from': from}).toString();
+        }
+        return _landing(state);
       }
 
       final isPublic = loc == '/login';
-      if (!isAuthed && !isPublic) return '/login';
-      if (isAuthed && loc == '/login') return '/dashboard';
+      if (!isAuthed && !isPublic) return _withFrom('/login', state);
+      if (isAuthed && loc == '/login') return _landing(state);
 
       // Role-based route guards
       final user = auth.user;
@@ -152,6 +184,13 @@ final routerProvider = Provider<GoRouter>((ref) {
                 pageBuilder: (context, state) => NoTransitionPage(
                   key: state.pageKey,
                   child: const AuditScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'smtp',
+                pageBuilder: (context, state) => NoTransitionPage(
+                  key: state.pageKey,
+                  child: const SmtpSettingsScreen(),
                 ),
               ),
             ],

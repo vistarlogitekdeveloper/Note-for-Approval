@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../shared/widgets/gradient_button.dart';
 import '../../../shared/widgets/vistar_brand.dart';
 import '../providers/auth_provider.dart';
@@ -53,12 +54,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         _passCtrl.text,
       );
     } catch (e) {
-      setState(() {
-        _error = 'Invalid email or password. Please try again.';
-      });
+      if (!mounted) return;
+      setState(() => _error = _loginError(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// What to tell someone whose sign-in failed. A wrong password, a disabled
+  /// account, too many attempts and an unreachable server each need a
+  /// different next step, so they are not all "invalid email or password".
+  static String _loginError(Object e) {
+    if (e is! ApiException) return 'Could not sign in. Please try again.';
+    if (e.isNetwork) {
+      return 'Cannot reach the server. Check your connection and try again.';
+    }
+    if (e.statusCode == 429) {
+      return 'Too many sign-in attempts. Please wait a few minutes and try again.';
+    }
+    // Deactivated account / organisation: the server's own sentence says so.
+    if (e.isForbidden) return e.message;
+    if (e.isUnauthorized || e.isValidation) {
+      return 'Invalid email or password. Please try again.';
+    }
+    return 'Could not sign in right now. Please try again shortly.';
   }
 
   @override
@@ -129,7 +148,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                           Text(
                             AppStrings.company,
                             style: GoogleFonts.bricolageGrotesque(
-                              color: context.c.txt,
+                              color: AppPalette.dark.txt, // the hero panel is always dark
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
                             ),
@@ -153,7 +172,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       Text(
                         'Approvals',
                         style: GoogleFonts.bricolageGrotesque(
-                          color: context.c.txt,
+                          color: AppPalette.dark.txt,
                           fontSize: 52,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -1.5,
@@ -164,7 +183,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       Text(
                         'Replace paper-based note approvals with a\ndigital, multi-level workflow — tracked,\naudit-ready, and PDF-archived.',
                         style: TextStyle(
-                          color: context.c.txt3,
+                          color: AppPalette.dark.txt2,
                           fontSize: 15.5,
                           height: 1.7,
                         ),
@@ -298,7 +317,7 @@ class _StatFigure extends StatelessWidget {
           ),
         ),
         Text(label,
-            style: TextStyle(color: context.c.txt3, fontSize: 12.5)),
+            style: TextStyle(color: AppPalette.dark.txt3, fontSize: 12.5)),
       ],
     );
   }

@@ -67,11 +67,15 @@ class ApiClient {
           return handler.next(error);
         }
 
-        final refreshed = await _refreshOnce();
-        if (!refreshed) {
+        final outcome = await _refreshOnce();
+        if (outcome == _Refresh.rejected) {
           onSessionExpired?.call();
           return handler.next(error);
         }
+        // The refresh call itself could not get through (offline, a laptop
+        // just waking up, the server restarting). The session may be fine:
+        // keep it, and let this request fail like any network error.
+        if (outcome == _Refresh.unreachable) return handler.next(error);
 
         // A consumed multipart stream cannot be replayed, so uploads surface
         // the 401 instead of silently sending an empty body. The refresh above
@@ -119,29 +123,29 @@ class ApiClient {
   // landed second would revoke the winner's token — logging the user out. So
   // refreshes are single-flighted: parallel 401s await one in-flight attempt.
 
-  Completer<bool>? _refreshInFlight;
+  Completer<_Refresh>? _refreshInFlight;
 
-  Future<bool> _refreshOnce() {
+  Future<_Refresh> _refreshOnce() {
     final existing = _refreshInFlight;
     if (existing != null) return existing.future;
 
-    final completer = Completer<bool>();
+    final completer = Completer<_Refresh>();
     _refreshInFlight = completer;
 
-    _performRefresh().then((ok) {
+    _performRefresh().then((outcome) {
       _refreshInFlight = null;
-      completer.complete(ok);
+      completer.complete(outcome);
     }).catchError((_) {
       _refreshInFlight = null;
-      completer.complete(false);
+      completer.complete(_Refresh.unreachable);
     });
 
     return completer.future;
   }
 
-  Future<bool> _performRefresh() async {
+  Future<_Refresh> _performRefresh() async {
     final refreshToken = await _storage.read(key: _kRefreshToken);
-    if (refreshToken == null) return false;
+    if (refreshToken == null) return _Refresh.rejected;
     try {
       final res = await _refreshDio.post(
         '/auth/refresh',
@@ -153,10 +157,19 @@ class ApiClient {
         data['accessToken'] as String,
         data['refreshToken'] as String,
       );
-      return true;
-    } catch (_) {
+      return _Refresh.ok;
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      // Only an explicit refusal ends the session. A timeout, no network or a
+      // 5xx says nothing about the token — clearing it there signed people
+      // out for a blip.
+      if (status != 401 && status != 403) return _Refresh.unreachable;
+      // Another tab on this browser may have rotated the (single-use) token a
+      // moment ago and stored the new pair: that is not an expiry.
+      final current = await _storage.read(key: _kRefreshToken);
+      if (current != null && current != refreshToken) return _Refresh.ok;
       await clearTokens();
-      return false;
+      return _Refresh.rejected;
     }
   }
 
@@ -192,8 +205,17 @@ class ApiClient {
 
   Future<ApiResult> delete(String path) => _send(() => _dio.delete(path));
 
-  Future<ApiResult> upload(String path, FormData data) =>
-      _send(() => _dio.post(path, data: data));
+  /// Uploads get their own, long timeouts. On the web the whole request is
+  /// bounded by connect + receive (45 s by default), which a 20 MB file on a
+  /// slow uplink cannot meet.
+  Future<ApiResult> upload(String path, FormData data) => _send(() => _dio.post(
+        path,
+        data: data,
+        options: Options(
+          sendTimeout: const Duration(minutes: 10),
+          receiveTimeout: const Duration(minutes: 10),
+        ),
+      ));
 
   /// For the PDF and attachment downloads, which stream raw bytes rather than
   /// the JSON envelope. Both require the Bearer token, so a bare browser link
@@ -245,4 +267,16 @@ class ApiClient {
     });
     return cleaned.isEmpty ? null : cleaned;
   }
+}
+
+/// How a token refresh went.
+enum _Refresh {
+  /// New tokens are stored; retry the request.
+  ok,
+
+  /// The server refused the refresh token: the session is over.
+  rejected,
+
+  /// The refresh never got an answer (offline, timeout, 5xx). Keep the session.
+  unreachable,
 }

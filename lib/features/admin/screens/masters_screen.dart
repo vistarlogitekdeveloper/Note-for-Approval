@@ -12,7 +12,9 @@ import '../../../shared/widgets/gradient_button.dart';
 
 /// Admin view of the purpose list, so it includes deactivated rows — the note
 /// form's [purposesProvider] deliberately shows only active ones.
-final purposesMasterProvider = FutureProvider<List<PurposeMaster>>((ref) async {
+// autoDispose: an app-lifetime cache showed the previous admin's data
+// (even another organisation's) after a sign-out and sign-in.
+final purposesMasterProvider = FutureProvider.autoDispose<List<PurposeMaster>>((ref) async {
   return ref.read(notesRepositoryProvider).getPurposes(includeInactive: true);
 });
 
@@ -24,13 +26,13 @@ class MastersScreen extends ConsumerWidget {
     final purposesAsync = ref.watch(purposesMasterProvider);
 
     return Padding(
-      padding: const EdgeInsets.all(28),
+      padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 600 ? 16 : 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Column(
+              Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Purpose Masters',
@@ -43,8 +45,8 @@ class MastersScreen extends ConsumerWidget {
                   Text('Manage Purpose/Objective dropdown values',
                       style: TextStyle(color: context.c.txt3, fontSize: 14)),
                 ],
-              ),
-              const Spacer(),
+              )),
+              const SizedBox(width: 12),
               GradientButton(
                 label: 'Add Purpose',
                 icon: Icons.add_rounded,
@@ -63,10 +65,7 @@ class MastersScreen extends ConsumerWidget {
                       child: ShimmerCard(height: 56),
                     )),
               ),
-              error: (e, _) => Center(
-                child: Text('Error: $e',
-                    style: TextStyle(color: context.c.bad)),
-              ),
+              error: (e, _) => ErrorState(error: e, onRetry: () => ref.invalidate(purposesMasterProvider)),
             ),
           ),
         ],
@@ -220,6 +219,17 @@ class _PurposesList extends ConsumerWidget {
     PurposeMaster item,
     bool value,
   ) async {
+    if (!value &&
+        !await confirmAction(
+          context,
+          title: 'Deactivate "${item.name}"?',
+          message: 'It will no longer be offered when raising a note. Notes that '
+              'already use it keep it.',
+          confirmLabel: 'Deactivate',
+        )) {
+      return;
+    }
+    if (!context.mounted) return;
     try {
       await ref
           .read(notesRepositoryProvider)

@@ -94,13 +94,19 @@ class _GradientButtonState extends State<GradientButton>
                 Icon(widget.icon, size: fz + 2, color: Colors.white),
                 const SizedBox(width: 8),
               ],
-              Text(
-                widget.label,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: fz,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.3,
+              // Flexible: in a narrow slot the label shortens with an
+              // ellipsis instead of overflowing the button.
+              Flexible(
+                child: Text(
+                  widget.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: fz,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
                 ),
               ),
             ],

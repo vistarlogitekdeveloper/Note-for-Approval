@@ -219,6 +219,9 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
         _autoStatus = _AutoSave.saved;
         _autosaveInFlight = false;
       });
+      // My Notes and the detail page stay mounted under this route; without
+      // this a draft saved here was missing from them on the way back.
+      _invalidateLists(note.id);
     } catch (_) {
       if (!mounted) return;
       // Stay quiet and let the next edit retry; the manual buttons still work.
@@ -310,10 +313,18 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
   /// A draft is still being written; a returned note has been sent back to be
   /// revised. Both belong to the creator. Anything else is in flight (or is a
   /// terminal rejection) and the server would refuse the save.
+  ///
+  /// Only the creator may change it: the server answers anyone else with 403
+  /// NOT_INITIATOR, so an admin opening someone else's draft gets it read-only
+  /// instead of a form whose every save fails.
   bool get _editable =>
-      _status == null ||
-      _status == NoteStatus.draft ||
-      _status == NoteStatus.returned;
+      _isOwner &&
+      (_status == null ||
+          _status == NoteStatus.draft ||
+          _status == NoteStatus.returned);
+
+  bool get _isOwner =>
+      _initiatorId == null || _initiatorId == ref.read(authProvider).user?.id;
 
   /// True when this is a revision of a note an approver sent back, which is a
   /// different thing from finishing a draft and should read that way.
@@ -426,6 +437,27 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
   }
 
   Future<void> _removeExisting(NoteAttachment attachment) async {
+    // This deletes the stored file at once — there is no "undo" on save.
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: context.c.surface,
+        title: Text('Remove attachment?', style: TextStyle(color: context.c.txt, fontSize: 17)),
+        content: Text(
+          '${attachment.fileName} will be deleted from this note.',
+          style: TextStyle(color: context.c.txt2, fontSize: 14),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: context.c.bad),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
     setState(() => _attachmentError = null);
     try {
       await ref
@@ -434,6 +466,7 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
       if (!mounted) return;
       setState(() => _existing =
           _existing.where((a) => a.id != attachment.id).toList());
+      _invalidateLists(_noteId!);
     } catch (e) {
       if (!mounted) return;
       setState(() => _attachmentError = 'Could not remove ${attachment.fileName}: $e');
@@ -446,13 +479,70 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
   Future<void> _afterSave(Note note) async {
     _noteId = note.id;
     _staged.clear();
+    _invalidateLists(note.id);
+    // Re-read so the attachment list reflects what the server actually stored.
+    await _loadNote();
+  }
+
+  void _invalidateLists(String noteId) {
     ref.invalidate(myNotesProvider);
     ref.invalidate(filteredNotesProvider);
     ref.invalidate(recentNotesProvider);
     ref.invalidate(dashboardStatsProvider);
-    ref.invalidate(noteDetailProvider(note.id));
-    // Re-read so the attachment list reflects what the server actually stored.
-    await _loadNote();
+    ref.invalidate(noteDetailProvider(noteId));
+  }
+
+  /// Passed to the form notifier: the note exists on the server from here on,
+  /// so a retry after a later failure updates it rather than creating another.
+  void _onDraftSaved(Note draft) {
+    if (!mounted) return;
+    setState(() {
+      _noteId = draft.id;
+      _status ??= draft.status;
+    });
+    _invalidateLists(draft.id);
+  }
+
+  /// The staged files are on the server; never send them again.
+  void _onUploaded() {
+    if (!mounted) return;
+    setState(_staged.clear);
+  }
+
+  /// Leave the form, asking first if something typed or attached would be
+  /// lost (auto-save only runs once every required field is filled).
+  Future<void> _cancel() async {
+    final untouched = _selectedPurposeId == null &&
+        !_chainDirty &&
+        [_objectiveDetailCtrl, _briefNoteCtrl, _benefitCtrl, _costImpactCtrl]
+            .every((c) => c.text.trim().isEmpty);
+    final unsaved = _editable &&
+        (_staged.isNotEmpty ||
+            (!untouched && _formSnapshot() != _lastSavedSnapshot));
+    if (unsaved) {
+      final leave = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: context.c.surface,
+          title: Text('Discard changes?', style: TextStyle(color: context.c.txt, fontSize: 17)),
+          content: Text(
+            'You have changes that are not saved. Leave this page and lose them?',
+            style: TextStyle(color: context.c.txt2, fontSize: 14),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Keep editing')),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(foregroundColor: context.c.bad),
+              child: const Text('Discard'),
+            ),
+          ],
+        ),
+      );
+      if (leave != true || !mounted) return;
+    }
+    _autosaveTimer?.cancel();
+    if (mounted) context.go(_noteId != null && _isEdit ? '/notes/$_noteId' : '/notes');
   }
 
   @override
@@ -493,28 +583,29 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
       );
     }
 
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(28),
+      padding: EdgeInsets.all(compact ? 16 : 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header
-          Row(
-            children: [
-              Column(
+          Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     _isEdit ? 'Edit Note' : 'Raise New Note',
                     style: GoogleFonts.bricolageGrotesque(
                       color: context.c.txt,
-                      fontSize: 28,
+                      fontSize: compact ? 24 : 28,
                       fontWeight: FontWeight.w800,
                       letterSpacing: -0.5,
                     ),
                   ),
                   Text(
-                    !_editable
+                    !_isOwner
+                        ? 'Only the person who raised this note can change it'
+                        : !_editable
                         ? 'This note is in flight and can no longer be changed'
                         : _isRevision
                             ? (_lockedCount > 0
@@ -526,8 +617,6 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                     style: TextStyle(color: context.c.txt3, fontSize: 14),
                   ),
                 ],
-              ),
-            ],
           ),
           const SizedBox(height: 24),
 
@@ -541,9 +630,12 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
           // rather than let the user retype a form that will 409 on save.
           if (!_editable)
             _Banner(
-              msg: 'This note is ${_status!.label.toLowerCase()} and is no longer '
-                  'editable. Only a draft, or a note sent back for revision, '
-                  'can be changed.',
+              msg: !_isOwner
+                  ? 'You are viewing a note raised by someone else. Only its '
+                      'creator can edit or submit it.'
+                  : 'This note is ${_status!.label.toLowerCase()} and is no longer '
+                      'editable. Only a draft, or a note sent back for revision, '
+                      'can be changed.',
               isError: true,
             ),
 
@@ -576,6 +668,9 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                         // The form is only built once the note has loaded, so
                         // the initial value already carries the saved purpose.
                         initialValue: value,
+                        // Fill the field and ellipsise: a long purpose name
+                        // otherwise pushed the field hundreds of px wide.
+                        isExpanded: true,
                         dropdownColor: context.c.surface2,
                         style: TextStyle(color: context.c.txt, fontSize: 14),
                         decoration: InputDecoration(
@@ -588,7 +683,7 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                         items: active
                             .map((p) => DropdownMenuItem(
                                   value: p.id,
-                                  child: Text(p.name),
+                                  child: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                                 ))
                             .toList(),
                         validator: (v) =>
@@ -606,7 +701,13 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                       );
                     },
                     loading: () => const _FieldShimmer(),
-                    error: (_, __) => const SizedBox.shrink(),
+                    // Without the list there is no way to pick a purpose, so
+                    // say so and offer a retry rather than hide the field.
+                    error: (e, _) => ErrorState(
+                      compact: true,
+                      error: e,
+                      onRetry: () => ref.invalidate(purposesProvider),
+                    ),
                   ),
                   const SizedBox(height: 16),
 
@@ -733,16 +834,21 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                   ),
                   const SizedBox(height: 28),
 
-                  // Actions
-                  Row(
+                  // Actions. A Wrap, not a Row: on a phone the three buttons
+                  // do not fit on one line and Submit was clipped off-screen.
+                  if (_editable) ...[
+                    _AutosaveStatus(status: _autoStatus, at: _lastSavedAt),
+                    const SizedBox(height: 12),
+                  ],
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 12,
+                    runSpacing: 12,
                     children: [
-                      if (_editable) _AutosaveStatus(status: _autoStatus, at: _lastSavedAt),
-                      const Spacer(),
                       GhostButton(
                         label: 'Cancel',
-                        onPressed: () => context.go('/notes'),
+                        onPressed: _cancel,
                       ),
-                      const SizedBox(width: 12),
                       GhostButton(
                         label: formState.loading ? 'Saving…' : 'Save as Draft',
                         icon: Icons.save_outlined,
@@ -757,6 +863,8 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                                   _buildData(),
                                   editId: _noteId,
                                   attachments: List.of(_staged),
+                                  onDraftSaved: _onDraftSaved,
+                                  onUploaded: _onUploaded,
                                 );
                                 if (note != null && mounted) {
                                   _lastSavedSnapshot = _formSnapshot();
@@ -764,14 +872,13 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                                 }
                               },
                       ),
-                      const SizedBox(width: 12),
                       GradientButton(
                         label: _isRevision
                             ? 'Resubmit for Approval'
                             : 'Submit for Approval',
                         icon: Icons.send_rounded,
                         loading: formState.loading,
-                        onPressed: !_editable || _autosaveInFlight
+                        onPressed: !_editable || formState.loading || _autosaveInFlight
                             ? null
                             : () async {
                                 _autosaveTimer?.cancel();
@@ -780,16 +887,16 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                                   _buildData(),
                                   editId: _noteId,
                                   attachments: List.of(_staged),
+                                  onDraftSaved: _onDraftSaved,
+                                  onUploaded: _onUploaded,
                                 );
                                 if (note == null || !mounted) return;
                                 // Submitted notes leave draft, so the form is
                                 // done with them — hand off to the detail view.
                                 _staged.clear();
-                                ref.invalidate(myNotesProvider);
-                                ref.invalidate(filteredNotesProvider);
-                                ref.invalidate(recentNotesProvider);
-                                ref.invalidate(dashboardStatsProvider);
-                                ref.invalidate(noteDetailProvider(note.id));
+                                _lastSavedSnapshot = _formSnapshot();
+                                _invalidateLists(note.id);
+                                ref.invalidate(pendingMyActionCountProvider);
                                 if (context.mounted) context.go('/notes/${note.id}');
                               },
                       ),
@@ -834,13 +941,22 @@ class _CharLimitField extends StatefulWidget {
 class _CharLimitFieldState extends State<_CharLimitField> {
   int _chars = 0;
 
+  void _count() => setState(() => _chars = widget.controller.text.length);
+
   @override
   void initState() {
     super.initState();
     _chars = widget.controller.text.length;
-    widget.controller.addListener(() {
-      setState(() => _chars = widget.controller.text.length);
-    });
+    widget.controller.addListener(_count);
+  }
+
+  @override
+  void dispose() {
+    // The controller belongs to the screen and outlives this field (it is
+    // rebuilt after a load error + retry); a listener left behind would call
+    // setState on a disposed State.
+    widget.controller.removeListener(_count);
+    super.dispose();
   }
 
   @override

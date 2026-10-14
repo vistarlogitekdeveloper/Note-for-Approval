@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/telemetry/telemetry.dart';
 import '../../../shared/models/user.dart';
 import '../data/auth_repository.dart';
@@ -44,14 +45,37 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final AuthRepository _repo;
 
   Future<void> _init() async {
+    // Nobody signed in on this device: go straight to the sign-in page rather
+    // than wait on a /auth/me that can only answer 401.
+    bool stored;
     try {
-      final user = await _repo.getMe();
-      // Usage analytics (not awaited): a restored session is a sign-in,
-      // before the state change so the first screen is already theirs.
-      _identify(user);
-      state = AuthState(initializing: false, user: user);
+      stored = await _repo.hasStoredSession();
     } catch (_) {
-      state = const AuthState(initializing: false);
+      stored = true; // storage unreadable: let the server decide
+    }
+    if (!stored) {
+      if (mounted) state = const AuthState(initializing: false);
+      return;
+    }
+    // A session exists. A network failure or a server restart says nothing
+    // about it, so try a few times before giving up — dropping a signed-in
+    // user at the login page because the first request was slow is wrong.
+    for (var attempt = 1; ; attempt++) {
+      try {
+        final user = await _repo.getMe();
+        // Usage analytics (not awaited): a restored session is a sign-in,
+        // before the state change so the first screen is already theirs.
+        _identify(user);
+        if (mounted) state = AuthState(initializing: false, user: user);
+        return;
+      } catch (e) {
+        final transient = e is ApiException && (e.isNetwork || (e.statusCode ?? 0) >= 500);
+        if (!transient || attempt >= 3) {
+          if (mounted) state = const AuthState(initializing: false);
+          return;
+        }
+        await Future<void>.delayed(Duration(seconds: attempt));
+      }
     }
   }
 

@@ -63,7 +63,9 @@ class DecisionOutcome {
     final pdf = (meta?['pdf'] as Map?)?.cast<String, dynamic>();
     return DecisionOutcome(
       note: note,
-      emailSent: notified?['sent'] as bool? ?? false,
+      // The server hands mail to a background job after the decision commits
+      // and reports `dispatched: true`; `sent` is the older, synchronous shape.
+      emailSent: (notified?['sent'] ?? notified?['dispatched']) as bool? ?? false,
       emailIssue: (notified?['skipped'] ?? notified?['error'] ?? notified?['reason'])
           as String?,
       pdfGenerated: pdf?['generated'] as bool? ?? false,

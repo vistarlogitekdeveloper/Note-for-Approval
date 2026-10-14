@@ -14,7 +14,7 @@ const _userJson = {
   'id': '11111111-1111-4111-8111-111111111111',
   'name': 'Asha Rao',
   'email': 'approver1@vistar.com',
-  'role': 'approver',
+  'role': 'user',
   'hierarchy_level': 1,
   'hierarchy_role_name': 'L1 - Section Head',
   'is_active': true,
@@ -40,7 +40,7 @@ const _noteListItemJson = {
     'id': '44444444-4444-4444-8444-444444444444',
     'name': 'Ravi Kumar',
     'email': 'initiator@vistar.com',
-    'role': 'initiator',
+    'role': 'user',
     'hierarchy_role_name': null,
   },
   'purpose': {
@@ -54,7 +54,7 @@ void main() {
     test('reads snake_case hierarchy fields', () {
       final user = User.fromJson(_userJson);
       expect(user.name, 'Asha Rao');
-      expect(user.role, UserRole.approver);
+      expect(user.role, UserRole.user);
       // Regression: these came back null while parsing camelCase, which
       // silently stripped every approver of their level.
       expect(user.hierarchyLevel, 1);
@@ -63,16 +63,30 @@ void main() {
       expect(user.createdAt, isNotNull);
     });
 
-    test('superAdmin role value round-trips', () {
-      final user = User.fromJson({..._userJson, 'role': 'superAdmin'});
-      expect(user.role, UserRole.superAdmin);
+    test('admin role value round-trips', () {
+      final user = User.fromJson({..._userJson, 'role': 'admin'});
+      expect(user.role, UserRole.admin);
       expect(user.role.canAdmin, isTrue);
-      expect(user.toJson()['role'], 'superAdmin');
+      expect(user.toJson()['role'], 'admin');
     });
 
-    test('unknown role degrades to initiator rather than throwing', () {
+    test('pre-090 role values still resolve to the two-role model', () {
+      // A cached token or an old response may still carry the four-role
+      // values: superAdmin -> admin, initiator/approver -> user.
+      final legacyAdmin = User.fromJson({..._userJson, 'role': 'superAdmin'});
+      expect(legacyAdmin.role, UserRole.admin);
+      // ...and it re-serialises as the current wire value.
+      expect(legacyAdmin.toJson()['role'], 'admin');
+      for (final r in ['approver', 'initiator']) {
+        expect(User.fromJson({..._userJson, 'role': r}).role, UserRole.user,
+            reason: 'legacy role "$r" must map to user');
+      }
+    });
+
+    test('unknown role degrades to user rather than throwing', () {
       expect(User.fromJson({..._userJson, 'role': 'wizard'}).role,
-          UserRole.initiator);
+          UserRole.user);
+      expect(User.fromJson({..._userJson, 'role': null}).role, UserRole.user);
     });
   });
 
@@ -161,8 +175,20 @@ void main() {
         'pendingApproval': 5,
         'approved': 4,
         'rejected': 1,
+        'returned': 0,
+        // The server now splits out the caller's own notes; "raised by me" is
+        // that block's total (the flat `raisedByMe` key is no longer read).
+        'mine': {
+          'total': 6,
+          'draft': 1,
+          'pendingApproval': 3,
+          'approved': 2,
+          'rejected': 0,
+          'returned': 0,
+        },
         'myPendingApprovals': 3,
         'raisedByMe': 6,
+        'isAdmin': true,
         'scope': 'all',
       });
 
@@ -173,6 +199,8 @@ void main() {
       expect(stats.rejectedNotes, 1);
       expect(stats.pendingMyAction, 3);
       expect(stats.raisedByMe, 6);
+      expect(stats.hasMineBreakdown, isTrue);
+      expect(stats.isAdmin, isTrue);
       expect(stats.isGlobalScope, isTrue);
     });
   });

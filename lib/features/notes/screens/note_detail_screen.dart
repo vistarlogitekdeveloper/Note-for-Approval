@@ -30,8 +30,13 @@ class NoteDetailScreen extends ConsumerWidget {
       data: (note) => _NoteDetail(note: note, currentUser: user),
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(
-        child: Text('Error loading note: $e',
-            style: TextStyle(color: context.c.bad)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ErrorState(error: e, onRetry: () => ref.invalidate(noteDetailProvider(id))),
+            TextButton(onPressed: () => context.go('/notes'), child: const Text('Back to notes')),
+          ],
+        ),
       ),
     );
   }
@@ -71,17 +76,59 @@ class _NoteDetail extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final compact = MediaQuery.sizeOf(context).width < 900;
+    // Approve / Reject / Send back — shown ONLY to the user named at the
+    // note's current level (see _canApprove). In a Wrap so that on a narrow
+    // screen they flow onto a second line instead of running off the edge.
+    final actions = Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      alignment: compact ? WrapAlignment.start : WrapAlignment.end,
+      children: [
+        if (_canEdit)
+          GhostButton(
+            // A returned note is a different act from finishing a draft —
+            // the label should say which one this is.
+            label: note.isReturned ? 'Revise & resubmit' : 'Edit draft',
+            icon: note.isReturned ? Icons.restart_alt_rounded : Icons.edit_outlined,
+            onPressed: () => context.go('/notes/${note.id}/edit'),
+          ),
+        // Gated on status, not on pdf_url: the PDF regenerates on demand from
+        // DB data, so an approved note can be fetched even when the stored key
+        // is stale or the file was wiped.
+        if (note.hasPdf) _DownloadPdfButton(note: note),
+        if (_canApprove) ...[
+          GhostButton(
+            label: 'Send back',
+            icon: Icons.reply_rounded,
+            onPressed: () => _showRemarkDialog(context, ref, decision: _Decision.reassign),
+          ),
+          GhostButton(
+            label: 'Reject',
+            icon: Icons.close_rounded,
+            danger: true,
+            onPressed: () => _showRemarkDialog(context, ref, decision: _Decision.reject),
+          ),
+          GradientButton(
+            label: 'Approve',
+            icon: Icons.check_rounded,
+            onPressed: () => _showRemarkDialog(context, ref, decision: _Decision.approve),
+          ),
+        ],
+      ],
+    );
+    final hasActions = _canEdit || note.hasPdf || _canApprove;
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(28),
+      padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 600 ? 16 : 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
+          // Header. Phones: title, then the actions underneath. Wider: side
+          // by side. (A vertical Flex with a Flexible child inside this scroll
+          // view cannot lay out — it has no height to divide.)
+          Builder(builder: (context) {
+            final titleBlock = Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
@@ -108,10 +155,11 @@ class _NoteDetail extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Row(
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 6,
                       children: [
                         StatusPill(note.status),
-                        const SizedBox(width: 10),
                         if (note.status == NoteStatus.pendingApproval)
                           LevelPill(
                             current: note.currentLevel,
@@ -120,60 +168,24 @@ class _NoteDetail extends ConsumerWidget {
                       ],
                     ),
                   ],
-                ),
-              ),
-              // Actions
-              Row(
+                );
+            if (compact) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (_canEdit)
-                    GhostButton(
-                      // A returned note is a different act from finishing a
-                      // draft — the label should say which one this is.
-                      label: note.isReturned ? 'Revise & resubmit' : 'Edit draft',
-                      icon: note.isReturned
-                          ? Icons.restart_alt_rounded
-                          : Icons.edit_outlined,
-                      onPressed: () => context.go('/notes/${note.id}/edit'),
-                    ),
-                  // Gated on status, not on pdf_url: the PDF regenerates on
-                  // demand from DB data, so an approved note can be fetched
-                  // even when the stored key is stale or the file was wiped.
-                  if (note.hasPdf) ...[
-                    if (_canEdit) const SizedBox(width: 12),
-                    _DownloadPdfButton(note: note),
-                  ],
-                  // Approve / Reject / Send back — shown ONLY to the user named
-                  // at the note's current level (see _canApprove). No admin
-                  // override, so there is no "acting on someone else's level"
-                  // case left to label.
-                  if (_canApprove) ...[
-                    const SizedBox(width: 12),
-                    GhostButton(
-                      label: 'Send back',
-                      icon: Icons.reply_rounded,
-                      onPressed: () => _showRemarkDialog(
-                        context, ref, decision: _Decision.reassign),
-                    ),
-                    const SizedBox(width: 12),
-                    GhostButton(
-                      label: 'Reject',
-                      icon: Icons.close_rounded,
-                      danger: true,
-                      onPressed: () => _showRemarkDialog(
-                        context, ref, decision: _Decision.reject),
-                    ),
-                    const SizedBox(width: 12),
-                    GradientButton(
-                      label: 'Approve',
-                      icon: Icons.check_rounded,
-                      onPressed: () => _showRemarkDialog(
-                        context, ref, decision: _Decision.approve),
-                    ),
-                  ],
+                  titleBlock,
+                  if (hasActions) ...[const SizedBox(height: 16), actions],
                 ],
-              ),
-            ],
-          ),
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: titleBlock),
+                if (hasActions) ...[const SizedBox(width: 16), Flexible(child: actions)],
+              ],
+            );
+          }),
           const SizedBox(height: 28),
 
           // Main content in two columns
@@ -205,6 +217,7 @@ class _NoteDetail extends ConsumerWidget {
                   rounds: note.trailByRound,
                   currentLevel: note.currentLevel,
                   totalLevels: note.totalLevels,
+                  status: note.status,
                 ),
               ],
             );
@@ -246,6 +259,7 @@ class _NoteDetail extends ConsumerWidget {
     ref.invalidate(filteredNotesProvider);
     ref.invalidate(recentNotesProvider);
     ref.invalidate(dashboardStatsProvider);
+    ref.invalidate(pendingMyActionCountProvider);
 
     // Mail and PDF run after the decision commits and are best-effort, so the
     // decision can succeed while notification does not. Say which happened
@@ -264,6 +278,15 @@ class _NoteDetail extends ConsumerWidget {
     } else {
       AppFeedback.info(context, buffer.toString());
     }
+
+    // A note sent back belongs to its creator again: the server stops showing
+    // it to the approvers, so reloading it here would only say "You do not
+    // have access". Go back to the queue instead.
+    final me = ref.read(authProvider).user;
+    final stillVisible = me != null && (me.role.canAdmin || me.id == note.initiatorId);
+    if (decision == _Decision.reassign && !stillVisible) {
+      context.go('/approvals');
+    }
   }
 }
 
@@ -277,7 +300,7 @@ enum _Decision {
     busyLabel: 'Approving…',
     pastMessage: 'Note approved',
     hint: 'Enter your approval remark…',
-    remarkRequired: false,
+    remarkRequired: true,
   ),
   reject(
     title: 'Reject Note',
@@ -311,8 +334,8 @@ enum _Decision {
   final String pastMessage;
   final String hint;
 
-  /// Approve may be confirmed with no remark (the server auto-fills one);
-  /// reject and reassign both need a reason the creator will read.
+  /// The server requires a remark for every decision (REMARK_REQUIRED), so
+  /// all three say so up front instead of failing after the click.
   final bool remarkRequired;
 }
 
@@ -391,8 +414,6 @@ class _RemarkDialogState extends ConsumerState<_RemarkDialog> {
   Future<void> _submit() async {
     final decision = widget.decision;
     final remark = _ctrl.text.trim();
-    // Approve may go through with no remark (the server records one); reject and
-    // reassign both need a reason the creator will read.
     if (decision.remarkRequired && remark.isEmpty) {
       setState(() => _error = 'A remark is required.');
       return;
@@ -453,6 +474,8 @@ class _RemarkDialogState extends ConsumerState<_RemarkDialog> {
             TextField(
               controller: _ctrl,
               maxLines: 4,
+              // The server's limit (decision schema: max 2000).
+              maxLength: 2000,
               autofocus: true,
               enabled: !_busy,
               style: TextStyle(color: context.c.txt),
@@ -517,7 +540,7 @@ class _NoteInfoCard extends StatelessWidget {
           _InfoRow('Note Number', note.noteNumber),
           _InfoRow('Raised By', note.initiatorName),
           _InfoRow('Email', note.initiatorEmail),
-          _InfoRow('Date Submitted', formatDateTime(note.createdAt)),
+          _InfoRow('Raised On', formatDateTime(note.createdAt)),
           _InfoRow('Purpose / Objective', note.purposeLabel),
           Divider(height: 24, color: context.c.line),
           _InfoRow('Objective in Detail', note.objectiveInDetail,
@@ -806,6 +829,7 @@ class _ApprovalTrailCard extends StatelessWidget {
     required this.rounds,
     required this.currentLevel,
     required this.totalLevels,
+    required this.status,
   });
 
   /// Decisions grouped by attempt, oldest first. A note rejected once and
@@ -816,7 +840,21 @@ class _ApprovalTrailCard extends StatelessWidget {
   final int currentLevel;
   final int totalLevels;
 
+  /// The note's status — what "completed" means depends on it.
+  final NoteStatus status;
+
   int get _count => rounds.fold(0, (n, r) => n + r.value.length);
+
+  /// Levels actually approved. `currentLevel` is the level the note is
+  /// WAITING at (or was stopped at), so the levels before it are the done
+  /// ones; only a fully approved note has every level done. Using
+  /// `currentLevel` itself read "1 of 3 completed" on a note nobody had
+  /// approved yet.
+  int get _completed {
+    if (status == NoteStatus.approved) return totalLevels;
+    if (status == NoteStatus.draft) return 0;
+    return (currentLevel - 1).clamp(0, totalLevels);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -828,7 +866,7 @@ class _ApprovalTrailCard extends StatelessWidget {
           const SizedBox(height: 16),
           // Progress bar
           LinearProgressIndicator(
-            value: totalLevels > 0 ? currentLevel / totalLevels : 0,
+            value: totalLevels > 0 ? _completed / totalLevels : 0,
             backgroundColor: context.c.surface3,
             valueColor:
                 const AlwaysStoppedAnimation<Color>(AppColors.pink),
@@ -838,7 +876,7 @@ class _ApprovalTrailCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Text(
-              '$currentLevel of $totalLevels levels completed',
+              '$_completed of $totalLevels levels approved',
               style:
                   TextStyle(color: context.c.txt3, fontSize: 12),
             ),
@@ -909,11 +947,13 @@ class _ApprovalStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isApproved = action.isApproved;
-    final color = isApproved ? context.c.ok : context.c.bad;
-    final icon = isApproved
-        ? Icons.check_circle_rounded
-        : Icons.cancel_rounded;
+    // Three outcomes, three looks: a send-back is a request for changes, not
+    // a rejection, and drawing it as a red ✗ told the creator the opposite.
+    final (color, icon) = action.isApproved
+        ? (context.c.ok, Icons.check_circle_rounded)
+        : action.isReassigned
+            ? (context.c.warn, Icons.reply_rounded)
+            : (context.c.bad, Icons.cancel_rounded);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -930,25 +970,30 @@ class _ApprovalStep extends StatelessWidget {
             children: [
               Icon(icon, color: color, size: 18),
               const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Level ${action.level}: ${action.roleName}',
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Level ${action.level}: ${action.roleName}'
+                      '${action.isReassigned ? ' · Sent back' : ''}',
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                  Text(
-                    action.approverName,
-                    style: TextStyle(
-                        color: context.c.txt, fontSize: 13.5, fontWeight: FontWeight.w600),
-                  ),
-                ],
+                    Text(
+                      action.approverName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: context.c.txt, fontSize: 13.5, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Text(
                 formatDateTime(action.actedAt),
                 style: TextStyle(
