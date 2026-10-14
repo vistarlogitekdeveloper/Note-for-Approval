@@ -5,9 +5,13 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/router/app_router.dart';
 import '../../features/auth/providers/auth_provider.dart';
+import '../../features/notes/providers/notes_provider.dart';
 import '../../shared/models/user.dart';
+import '../../shared/widgets/app_feedback.dart';
 import '../../shared/widgets/vistar_brand.dart';
+import 'account_dialogs.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key, required this.child});
@@ -20,6 +24,11 @@ class AppShell extends ConsumerStatefulWidget {
 class _AppShellState extends ConsumerState<AppShell> {
   bool _sidebarCollapsed = false;
 
+  /// The shell's own Scaffold. `Scaffold.of(context)` with this State's
+  /// context looks ABOVE the Scaffold built here, so on phones the menu button
+  /// threw and the drawer never opened.
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
@@ -28,6 +37,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     final isMobile = size.width < 768;
 
     return Scaffold(
+      key: _scaffoldKey,
       // Transparent so the ambient aurora + watermark below shows through;
       // AmbientBackground paints the base colour itself.
       backgroundColor: Colors.transparent,
@@ -47,8 +57,9 @@ class _AppShellState extends ConsumerState<AppShell> {
               children: [
                 _Topbar(
                   user: user,
+                  compact: isMobile,
                   onMenuTap: isMobile
-                      ? () => Scaffold.of(context).openDrawer()
+                      ? () => _scaffoldKey.currentState?.openDrawer()
                       : () => setState(() => _sidebarCollapsed = !_sidebarCollapsed),
                   collapsed: _sidebarCollapsed,
                 ),
@@ -135,6 +146,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                       _NavItem(icon: Icons.people_outlined, label: 'Users', path: '/admin/users', collapsed: collapsed),
                       _NavItem(icon: Icons.list_alt_outlined, label: 'Masters', path: '/admin/masters', collapsed: collapsed),
                       _NavItem(icon: Icons.history_outlined, label: 'Audit Log', path: '/admin/audit', collapsed: collapsed),
+                      _NavItem(icon: Icons.outgoing_mail, label: 'Email Settings', path: '/admin/smtp', collapsed: collapsed),
                     ], collapsed: collapsed),
                   ],
                 ],
@@ -243,7 +255,13 @@ class _NavItem extends ConsumerWidget {
       child: Tooltip(
         message: collapsed ? label : '',
         child: InkWell(
-          onTap: () => context.go(path),
+          onTap: () {
+            // In the phone drawer, close it — otherwise it stays over the
+            // page the user just picked.
+            final scaffold = Scaffold.maybeOf(context);
+            if (scaffold?.isDrawerOpen ?? false) scaffold!.closeDrawer();
+            context.go(path);
+          },
           borderRadius: BorderRadius.circular(10),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
@@ -346,17 +364,74 @@ class _Topbar extends ConsumerWidget {
     required this.user,
     required this.onMenuTap,
     required this.collapsed,
+    this.compact = false,
   });
 
   final User? user;
   final VoidCallback onMenuTap;
   final bool collapsed;
 
+  /// Phone width: the search box becomes an icon and the name beside the
+  /// avatar is dropped, so the bar fits a 360px screen.
+  final bool compact;
+
+  /// Search runs on My Notes, which matches note numbers and objectives.
+  static void _search(WidgetRef ref, BuildContext context, String text) {
+    ref.read(notesSearchProvider.notifier).state = text.trim();
+    context.go('/notes');
+  }
+
+  Future<void> _searchDialog(BuildContext context, WidgetRef ref) async {
+    final ctrl = TextEditingController(text: ref.read(notesSearchProvider));
+    final text = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: context.c.surface,
+        title: Text('Search notes', style: TextStyle(color: context.c.txt, fontSize: 17)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          textInputAction: TextInputAction.search,
+          decoration: const InputDecoration(hintText: 'Note number or objective'),
+          onSubmitted: (v) => Navigator.of(context).pop(v),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(ctrl.text), child: const Text('Search')),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (text != null && context.mounted) _search(ref, context, text);
+  }
+
+  Future<void> _onMenu(BuildContext context, WidgetRef ref, String v) async {
+    switch (v) {
+      case 'profile':
+        if (user != null) await showProfileDialog(context, user!);
+      case 'change_pw':
+        final changed = await showChangePasswordDialog(context);
+        if (!changed || !context.mounted) return;
+        AppFeedback.success(context, 'Password changed. Please sign in with your new password.');
+        await ref.read(authProvider.notifier).logout();
+        ref.read(routerProvider).go('/login');
+      case 'theme':
+        // Resolve the *effective* brightness so toggling from "system"
+        // flips to the opposite of what is currently on screen.
+        ref.read(themeModeProvider.notifier).toggle(Theme.of(context).brightness);
+      case 'logout':
+        await ref.read(authProvider.notifier).logout();
+        // A plain sign-in page: the next person to sign in on this browser
+        // should start at their dashboard, not on this page.
+        ref.read(routerProvider).go('/login');
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 20),
       decoration: BoxDecoration(
         color: context.c.bg2,
         border: Border(bottom: BorderSide(color: context.c.line)),
@@ -364,6 +439,7 @@ class _Topbar extends ConsumerWidget {
       child: Row(
         children: [
           IconButton(
+            tooltip: compact ? 'Menu' : (collapsed ? 'Expand menu' : 'Collapse menu'),
             icon: Icon(
               collapsed ? Icons.menu_open_rounded : Icons.menu_rounded,
               color: context.c.txt2,
@@ -371,87 +447,83 @@ class _Topbar extends ConsumerWidget {
             onPressed: onMenuTap,
           ),
           const SizedBox(width: 8),
-          // Search bar
-          Container(
-            height: 38,
-            width: 260,
-            decoration: BoxDecoration(
-              color: context.c.surface,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: context.c.line),
+          if (compact)
+            IconButton(
+              tooltip: 'Search notes',
+              icon: Icon(Icons.search_rounded, color: context.c.txt2),
+              onPressed: () => _searchDialog(context, ref),
+            )
+          else
+            Flexible(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 320),
+                child: _SearchBox(onSubmit: (t) => _search(ref, context, t)),
+              ),
             ),
-            child: Row(
-              children: [
-                SizedBox(width: 12),
-                Icon(Icons.search_rounded, color: context.c.txt3, size: 18),
-                SizedBox(width: 8),
-                Text('Search notes…',
-                    style: TextStyle(color: context.c.txt3, fontSize: 13.5)),
-              ],
-            ),
-          ),
           const Spacer(),
 
-          // Notification bell
-          IconButton(
-            icon: Stack(
-              children: [
-                Icon(Icons.notifications_outlined, color: context.c.txt2),
-                Positioned(
-                  top: 0,
-                  right: 0,
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: AppColors.pink,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            onPressed: () {},
-          ),
+          // Notes waiting for my decision. The badge only shows a real count.
+          Builder(builder: (context) {
+            final pending = ref.watch(pendingMyActionCountProvider).valueOrNull ?? 0;
+            return IconButton(
+              tooltip: pending == 0
+                  ? 'No notes waiting for you'
+                  : '$pending ${pending == 1 ? 'note' : 'notes'} waiting for your decision',
+              icon: Badge(
+                isLabelVisible: pending > 0,
+                backgroundColor: AppColors.pink,
+                label: Text(pending > 99 ? '99+' : '$pending'),
+                child: Icon(Icons.notifications_outlined, color: context.c.txt2),
+              ),
+              onPressed: () => context.go('/approvals'),
+            );
+          }),
 
           const SizedBox(width: 4),
 
           // User menu
           PopupMenuButton<String>(
+            tooltip: 'Account',
             child: Row(
               children: [
                 _UserAvatar(user: user, small: true),
-                const SizedBox(width: 8),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      user?.name ?? 'User',
-                      style: TextStyle(
-                        color: context.c.txt,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
+                if (!compact) ...[
+                  const SizedBox(width: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 180),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user?.name ?? 'User',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: context.c.txt,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          user?.role.label ?? '',
+                          style: TextStyle(
+                            color: context.c.txt3,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
                     ),
-                    Text(
-                      user?.role.label ?? '',
-                      style: TextStyle(
-                        color: context.c.txt3,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(width: 4),
-                Icon(Icons.keyboard_arrow_down_rounded,
-                    color: context.c.txt3, size: 16),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.keyboard_arrow_down_rounded, color: context.c.txt3, size: 16),
+                ],
               ],
             ),
             itemBuilder: (_) => [
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'profile',
-                child: const Row(
+                child: Row(
                   children: [
                     Icon(Icons.person_outline, size: 16),
                     SizedBox(width: 10),
@@ -459,9 +531,9 @@ class _Topbar extends ConsumerWidget {
                   ],
                 ),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'change_pw',
-                child: const Row(
+                child: Row(
                   children: [
                     Icon(Icons.lock_outline, size: 16),
                     SizedBox(width: 10),
@@ -501,19 +573,52 @@ class _Topbar extends ConsumerWidget {
                 ),
               ),
             ],
-            onSelected: (v) async {
-              if (v == 'logout') {
-                await ref.read(authProvider.notifier).logout();
-              } else if (v == 'theme') {
-                // Resolve the *effective* brightness so toggling from "system"
-                // flips to the opposite of what is currently on screen.
-                ref
-                    .read(themeModeProvider.notifier)
-                    .toggle(Theme.of(context).brightness);
-              }
-            },
+            onSelected: (v) => _onMenu(context, ref, v),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The header search field. Enter opens My Notes filtered to the text.
+class _SearchBox extends ConsumerStatefulWidget {
+  const _SearchBox({required this.onSubmit});
+  final ValueChanged<String> onSubmit;
+
+  @override
+  ConsumerState<_SearchBox> createState() => _SearchBoxState();
+}
+
+class _SearchBoxState extends ConsumerState<_SearchBox> {
+  late final _ctrl = TextEditingController(text: ref.read(notesSearchProvider));
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Cleared from the My Notes chip: empty the box too.
+    ref.listen(notesSearchProvider, (_, next) {
+      if (next != _ctrl.text) _ctrl.text = next;
+    });
+    return SizedBox(
+      height: 38,
+      child: TextField(
+        controller: _ctrl,
+        textInputAction: TextInputAction.search,
+        onSubmitted: widget.onSubmit,
+        style: TextStyle(color: context.c.txt, fontSize: 13.5),
+        decoration: InputDecoration(
+          hintText: 'Search notes…',
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          prefixIcon: Icon(Icons.search_rounded, color: context.c.txt3, size: 18),
+          prefixIconConstraints: const BoxConstraints(minWidth: 38),
+        ),
       ),
     );
   }

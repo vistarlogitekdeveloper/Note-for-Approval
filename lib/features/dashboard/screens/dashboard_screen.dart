@@ -21,8 +21,9 @@ class DashboardScreen extends ConsumerWidget {
     final statsAsync = ref.watch(dashboardStatsProvider);
     final recentAsync = ref.watch(recentNotesProvider);
 
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(28),
+      padding: EdgeInsets.all(compact ? 16 : 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -30,7 +31,8 @@ class DashboardScreen extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Column(
+              Expanded(
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
@@ -44,13 +46,16 @@ class DashboardScreen extends ConsumerWidget {
                   ),
                   Text(
                     'Welcome back, ${user?.name ?? 'User'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: context.c.txt3, fontSize: 14),
                   ),
                 ],
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 12),
               GradientButton(
-                label: 'Raise New Note',
+                label: compact ? 'New' : 'Raise New Note',
                 icon: Icons.add_rounded,
                 onPressed: () => context.go('/notes/new'),
               ),
@@ -90,7 +95,8 @@ class DashboardScreen extends ConsumerWidget {
               );
             },
             loading: () => const _KpiGridShimmer(),
-            error: (e, _) => const SizedBox.shrink(),
+            error: (e, _) => ErrorState(
+                compact: true, error: e, onRetry: () => ref.invalidate(dashboardStatsProvider)),
           ),
 
           const SizedBox(height: 32),
@@ -142,8 +148,7 @@ class DashboardScreen extends ConsumerWidget {
                 child: ShimmerCard(height: 80),
               )),
             ),
-            error: (e, _) => Text('Error: $e',
-                style: TextStyle(color: context.c.bad)),
+            error: (e, _) => ErrorState(compact: true, error: e, onRetry: () => ref.invalidate(recentNotesProvider)),
           ),
         ],
       ),
@@ -159,15 +164,33 @@ class DashboardScreen extends ConsumerWidget {
 /// content they hold — a 38px icon, a 32px number and a label cannot fit in
 /// ~133px — and every card reported a bottom overflow.
 ///
-/// `maxCrossAxisExtent` also replaces the hand-rolled breakpoints: the grid
-/// fits as many columns as it can at up to 320px each, so it stays responsive
-/// without any width thresholds to keep in sync.
-const kpiGridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
-  maxCrossAxisExtent: 230,
-  crossAxisSpacing: 12,
-  mainAxisSpacing: 12,
-  mainAxisExtent: 124,
-);
+/// The column count divides the six tiles evenly — 6, 3 or 2 across — so a
+/// tile is never left alone on a row (a max-extent grid put five on the first
+/// row and "Rejected" by itself on the second at common laptop widths).
+SliverGridDelegate kpiGridDelegate(double width) =>
+    SliverGridDelegateWithFixedCrossAxisCount(
+      crossAxisCount: width >= 1080 ? 6 : (width >= 520 ? 3 : 2),
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+      mainAxisExtent: 124,
+    );
+
+class _KpiLayout extends StatelessWidget {
+  const _KpiLayout({required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, box) => GridView(
+        gridDelegate: kpiGridDelegate(box.maxWidth),
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        children: children,
+      ),
+    );
+  }
+}
 
 class _KpiGrid extends ConsumerWidget {
   const _KpiGrid({required this.counts, required this.mineOnly});
@@ -190,10 +213,7 @@ class _KpiGrid extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return GridView(
-      gridDelegate: kpiGridDelegate,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+    return _KpiLayout(
       children: [
         KpiCard(
           label: 'Total Notes',
@@ -256,10 +276,7 @@ class _KpiGridShimmer extends StatelessWidget {
   Widget build(BuildContext context) {
     // Same delegate as the real grid, so the layout does not jump when the
     // stats land.
-    return GridView(
-      gridDelegate: kpiGridDelegate,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+    return _KpiLayout(
       children: List.generate(6, (_) => const ShimmerCard(height: 124)),
     );
   }
@@ -316,8 +333,10 @@ class _NoPendingBanner extends StatelessWidget {
           Icon(Icons.check_circle_outline_rounded,
               color: context.c.ok, size: 24),
           SizedBox(width: 12),
-          Text('No pending approvals — all caught up!',
-              style: TextStyle(color: context.c.txt2, fontSize: 14)),
+          Expanded(
+            child: Text('No pending approvals — all caught up!',
+                style: TextStyle(color: context.c.txt2, fontSize: 14)),
+          ),
         ],
       ),
     );
@@ -348,11 +367,15 @@ class _NoteRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // On a phone the number badge moves into the subtitle: badge, text and
+    // status side by side do not fit in 375px.
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return VistarCard(
       onTap: () => context.go('/notes/${note.id}'),
       child: Row(
         children: [
           // Number badge
+          if (!compact) ...[
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
@@ -370,6 +393,7 @@ class _NoteRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 14),
+          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -386,7 +410,9 @@ class _NoteRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  truncate(note.objectiveInDetail, 80),
+                  compact
+                      ? '${note.noteNumber} · ${note.objectiveInDetail}'
+                      : truncate(note.objectiveInDetail, 80),
                   style: TextStyle(color: context.c.txt3, fontSize: 12.5),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

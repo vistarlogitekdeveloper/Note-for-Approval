@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
@@ -15,13 +17,21 @@ import '../../../shared/models/user.dart';
 // invalidate explicitly — that covers the case where the screen never
 // unmounted.
 
+/// The signed-in user's id. Watched by every filter, scope and search
+/// setting below so they reset when someone else signs in on this browser —
+/// they used to carry over from the previous user.
+final _signedInUserId = Provider<String?>((ref) => ref.watch(authProvider.select((s) => s.user?.id)));
+
 // ── My Notes ─────────────────────────────────────────────────────────────────
 final myNotesProvider = FutureProvider.autoDispose<List<Note>>((ref) async {
   return ref.read(notesRepositoryProvider).getMyNotes();
 });
 
 // ── My own decision history ──────────────────────────────────────────────────
-final myDecisionsFilterProvider = StateProvider<String?>((ref) => null);
+final myDecisionsFilterProvider = StateProvider<String?>((ref) {
+  ref.watch(_signedInUserId);
+  return null;
+});
 
 final myDecisionsProvider =
     FutureProvider.autoDispose<MyDecisionPage>((ref) async {
@@ -47,11 +57,24 @@ final dashboardStatsProvider =
   return ref.read(notesRepositoryProvider).getDashboardStats();
 });
 
+// ── Notes waiting for my decision (the header bell) ─────────────────────────
+// Re-read every minute while the shell is up, and invalidated after every
+// decision, so the badge never sits on a stale count.
+final pendingMyActionCountProvider = FutureProvider.autoDispose<int>((ref) async {
+  final timer = Timer(const Duration(minutes: 1), ref.invalidateSelf);
+  ref.onDispose(timer.cancel);
+  final stats = await ref.read(notesRepositoryProvider).getDashboardStats();
+  return stats.pendingMyAction;
+});
+
 // Which KPI breakdown the dashboard shows, for admins. false = all visible (the
 // system-overview default), true = only notes I raised. The stats response
 // already carries both scopes, so flipping this just re-reads the cached object
 // — no network round-trip.
-final dashboardScopeMineProvider = StateProvider<bool>((ref) => false);
+final dashboardScopeMineProvider = StateProvider<bool>((ref) {
+  ref.watch(_signedInUserId);
+  return false;
+});
 
 // ── Recent notes (for dashboard) ─────────────────────────────────────────────
 final recentNotesProvider =
@@ -72,18 +95,34 @@ final selectableApproversProvider =
 });
 
 // ── Notes filter (for My Notes list) ─────────────────────────────────────────
-final notesFilterProvider = StateProvider<String?>((ref) => null);
+final notesFilterProvider = StateProvider<String?>((ref) {
+  ref.watch(_signedInUserId);
+  return null;
+});
 
 // Scope of the My Notes list. true = only notes I raised (the default, and the
 // only scope a non-admin ever has); false = every note I'm allowed to see,
 // which for an admin is all notes in the system. The server enforces this — an
 // admin's `mine:false` resolves to an empty visibility filter (everything),
 // a non-admin's to just the notes they're a party to.
-final notesScopeMineProvider = StateProvider<bool>((ref) => true);
+final notesScopeMineProvider = StateProvider<bool>((ref) {
+  ref.watch(_signedInUserId);
+  return true;
+});
 
+// Text from the header search box: note number or objective (server-side
+// ILIKE). Empty means no search.
+final notesSearchProvider = StateProvider<String>((ref) {
+  ref.watch(_signedInUserId);
+  return '';
+});
+
+/// A page, not a bare list: the screen needs `total` to say when there are
+/// more notes than it loaded (the server caps a page at 100).
 final filteredNotesProvider =
-    FutureProvider.autoDispose<List<Note>>((ref) async {
+    FutureProvider.autoDispose<NotePage>((ref) async {
   final filter = ref.watch(notesFilterProvider);
+  final search = ref.watch(notesSearchProvider).trim();
   // The `!isAdmin` guard lives HERE so it can't diverge from the screen: a
   // non-admin is always mine-only regardless of what the scope flag says (it
   // could have been flipped to false by a dashboard KPI tap, which is
@@ -92,9 +131,12 @@ final filteredNotesProvider =
   final isAdmin = ref.watch(authProvider).user?.role.canAdmin ?? false;
   final mineOnly = !isAdmin || ref.watch(notesScopeMineProvider);
   final repo = ref.read(notesRepositoryProvider);
-  if (mineOnly) return repo.getMyNotes(status: filter);
-  final page = await repo.getNotes(mine: false, status: filter);
-  return page.notes;
+  final page = await repo.getNotes(
+    mine: mineOnly,
+    status: filter,
+    search: search.isEmpty ? null : search,
+  );
+  return page;
 });
 
 // ── Create/Edit note form state ───────────────────────────────────────────────
@@ -124,18 +166,28 @@ class NoteFormNotifier extends StateNotifier<NoteFormState> {
   /// [attachments] are files staged in the form but not yet on the server. A
   /// note has to exist before anything can be attached to it, so they go up
   /// once the create/update lands.
+  ///
+  /// [onDraftSaved] fires as soon as the note exists on the server and
+  /// [onUploaded] as soon as the staged files are stored — before any later
+  /// step that can still fail. The screen keeps the id and drops the uploaded
+  /// files, so a retry updates the SAME note instead of creating a second one
+  /// (and burning another note number), and never uploads a file twice.
   Future<Note?> saveDraft(
     Map<String, dynamic> data, {
     String? editId,
     List<AttachmentUpload> attachments = const [],
+    void Function(Note draft)? onDraftSaved,
+    void Function()? onUploaded,
   }) async {
     state = state.copyWith(loading: true, error: null);
     try {
       final note = editId != null
           ? await _repo.updateNote(editId, data)
           : await _repo.createNote(data);
+      onDraftSaved?.call(note);
       if (attachments.isNotEmpty) {
         await _repo.uploadAttachments(note.id, attachments);
+        onUploaded?.call();
       }
       state = state.copyWith(loading: false, success: 'Draft saved');
       return note;
@@ -145,21 +197,26 @@ class NoteFormNotifier extends StateNotifier<NoteFormState> {
     }
   }
 
+  /// See [saveDraft] for [onDraftSaved] and [onUploaded].
   Future<Note?> submit(
     Map<String, dynamic> data, {
     String? editId,
     List<AttachmentUpload> attachments = const [],
+    void Function(Note draft)? onDraftSaved,
+    void Function()? onUploaded,
   }) async {
     state = state.copyWith(loading: true, error: null);
     try {
       final draft = editId != null
           ? await _repo.updateNote(editId, data)
           : await _repo.createNote(data);
+      onDraftSaved?.call(draft);
 
       // The server refuses attachments on anything but a draft, so they must
       // land before the submit flips the status.
       if (attachments.isNotEmpty) {
         await _repo.uploadAttachments(draft.id, attachments);
+        onUploaded?.call();
       }
 
       final note = await _repo.submitNote(draft.id);

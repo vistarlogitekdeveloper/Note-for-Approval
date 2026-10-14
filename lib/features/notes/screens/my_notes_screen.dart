@@ -32,16 +32,19 @@ class MyNotesScreen extends ConsumerWidget {
     // own notes, so the toggle is hidden and the scope stays "mine".
     final isAdmin = ref.watch(authProvider).user?.role.canAdmin ?? false;
     final mineOnly = !isAdmin || ref.watch(notesScopeMineProvider);
+    final search = ref.watch(notesSearchProvider).trim();
+    final compact = MediaQuery.sizeOf(context).width < 600;
 
     return Padding(
-      padding: const EdgeInsets.all(28),
+      padding: EdgeInsets.all(compact ? 16 : 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header
           Row(
             children: [
-              Column(
+              Expanded(
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(mineOnly ? 'My Notes' : 'All Notes',
@@ -57,10 +60,11 @@ class MyNotesScreen extends ConsumerWidget {
                           : 'Every note across the system',
                       style: TextStyle(color: context.c.txt3, fontSize: 14)),
                 ],
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 12),
               GradientButton(
-                label: 'Raise New Note',
+                label: compact ? 'New' : 'Raise New Note',
                 icon: Icons.add_rounded,
                 onPressed: () => context.go('/notes/new'),
               ),
@@ -119,15 +123,54 @@ class MyNotesScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
 
+          // The header search, shown so it can be seen and cleared here.
+          if (search.isNotEmpty) ...[
+            InputChip(
+              avatar: const Icon(Icons.search_rounded, size: 16),
+              label: Text('Results for "$search"'),
+              onDeleted: () => ref.read(notesSearchProvider.notifier).state = '',
+              deleteButtonTooltipMessage: 'Clear search',
+            ),
+            const SizedBox(height: 12),
+          ],
+
           // Notes table
           Expanded(
             child: notesAsync.when(
-              data: (notes) => notes.isEmpty
+              data: (page) => page.notes.isEmpty
                   ? EmptyState(
-                      message: 'No notes found for this filter.',
+                      message: search.isNotEmpty
+                          ? 'No notes match "$search".'
+                          : activeFilter == null
+                              ? (mineOnly
+                                  ? 'You have not raised any notes yet.'
+                                  : 'No notes yet.')
+                              : 'No notes found for this filter.',
                       icon: Icons.description_outlined,
                     )
-                  : _NotesTable(notes: notes, showInitiator: !mineOnly),
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: _NotesTable(
+                            notes: page.notes,
+                            meId: ref.watch(authProvider).user?.id,
+                            showInitiator: !mineOnly,
+                          ),
+                        ),
+                        // The server sends at most 100 at a time; say so
+                        // rather than let a short list pass for all of them.
+                        if (page.total > page.notes.length)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Text(
+                              'Showing the latest ${page.notes.length} of ${page.total} notes. '
+                              'Use the status filters or the search box to find older ones.',
+                              style: TextStyle(color: context.c.txt3, fontSize: 12.5),
+                            ),
+                          ),
+                      ],
+                    ),
               loading: () => ListView(
                 children: List.generate(5,
                     (_) => const Padding(
@@ -135,9 +178,7 @@ class MyNotesScreen extends ConsumerWidget {
                       child: ShimmerCard(height: 72),
                     )),
               ),
-              error: (e, _) =>
-                  Center(child: Text('Error: $e',
-                      style: TextStyle(color: context.c.bad))),
+              error: (e, _) => ErrorState(error: e, onRetry: () => ref.invalidate(filteredNotesProvider)),
             ),
           ),
         ],
@@ -147,8 +188,11 @@ class MyNotesScreen extends ConsumerWidget {
 }
 
 class _NotesTable extends StatelessWidget {
-  const _NotesTable({required this.notes, this.showInitiator = false});
+  const _NotesTable({required this.notes, required this.meId, this.showInitiator = false});
   final List<Note> notes;
+
+  /// The signed-in user, to tell their own editable notes from the rest.
+  final String? meId;
 
   /// When an admin views all notes, each row needs a "Raised By" column so it
   /// is clear whose note it is — otherwise the list is anonymous.
@@ -156,6 +200,13 @@ class _NotesTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, box) =>
+          box.maxWidth < 720 ? _cards(context) : _table(context),
+    );
+  }
+
+  Widget _table(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: context.c.line),
@@ -253,23 +304,76 @@ class _NotesTable extends StatelessWidget {
         _td(StatusPill(n.status)),
         _td(Text(formatDate(n.createdAt),
             style: TextStyle(color: context.c.txt3, fontSize: 12.5))),
-        // A draft is still being written and a returned note is waiting to be
-        // revised — both open the form. Anything else is read-only.
-        _td(
-          TextButton(
-            onPressed: () => context.go(
-              n.isDraft || n.isReturned
-                  ? '/notes/${n.id}/edit'
-                  : '/notes/${n.id}',
-            ),
-            child: Text(n.isDraft
-                ? 'Edit →'
-                : n.isReturned
-                    ? 'Revise →'
-                    : 'View →'),
-          ),
-        ),
+        _td(TextButton(
+          onPressed: () => context.go(_target(n)),
+          child: Text(_actionLabel(n)),
+        )),
       ],
+    );
+  }
+
+  /// A draft still being written, or a note sent back to be revised, opens the
+  /// form — but only for its creator; the server refuses anyone else's edit
+  /// (an admin browsing All Notes included). Everything else is read-only.
+  String _target(Note n) =>
+      n.editableBy(meId) ? '/notes/${n.id}/edit' : '/notes/${n.id}';
+
+  String _actionLabel(Note n) {
+    if (!n.editableBy(meId)) return 'View →';
+    return n.isReturned ? 'Revise →' : 'Edit →';
+  }
+
+  /// Phones: a card per note instead of a seven-column table.
+  Widget _cards(BuildContext context) {
+    return ListView.separated(
+      itemCount: notes.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (context, i) {
+        final n = notes[i];
+        return VistarCard(
+          onTap: () => context.go(_target(n)),
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(n.noteNumber,
+                        style: TextStyle(color: context.c.txt3, fontSize: 12, fontFamily: 'monospace')),
+                  ),
+                  StatusPill(n.status),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(n.purposeLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: context.c.txt, fontSize: 14, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text(n.objectiveInDetail,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: context.c.txt2, fontSize: 13)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      showInitiator ? '${n.initiatorName} · ${formatDate(n.createdAt)}' : formatDate(n.createdAt),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: context.c.txt3, fontSize: 12),
+                    ),
+                  ),
+                  Text(_actionLabel(n),
+                      style: const TextStyle(color: AppColors.pink, fontSize: 12.5, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

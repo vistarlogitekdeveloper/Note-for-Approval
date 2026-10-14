@@ -32,6 +32,13 @@ class AdminScreen extends ConsumerWidget {
           path: '/admin/audit',
           color: context.c.warn,
         ),
+        _AdminTile(
+          icon: Icons.outgoing_mail,
+          title: 'Email Settings',
+          subtitle: 'Mail server for approval notifications',
+          path: '/admin/smtp',
+          color: context.c.ok,
+        ),
       ];
 
   @override

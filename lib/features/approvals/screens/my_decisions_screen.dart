@@ -25,15 +25,17 @@ class MyDecisionsScreen extends ConsumerWidget {
     (null, 'All'),
     ('approved', 'Approved'),
     ('rejected', 'Rejected'),
+    ('reassigned', 'Sent back'),
   ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final active = ref.watch(myDecisionsFilterProvider);
     final async = ref.watch(myDecisionsProvider);
+    final compact = MediaQuery.sizeOf(context).width < 600;
 
     return Padding(
-      padding: const EdgeInsets.all(28),
+      padding: EdgeInsets.all(compact ? 16 : 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -51,16 +53,22 @@ class MyDecisionsScreen extends ConsumerWidget {
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.5,
                         )),
-                    Text('Every note you have approved or rejected',
+                    Text('Every note you have approved, rejected or sent back',
                         style: TextStyle(color: context.c.txt3, fontSize: 14)),
                   ],
                 ),
               ),
-              GhostButton(
-                label: 'Refresh',
-                icon: Icons.refresh_rounded,
-                onPressed: () => ref.invalidate(myDecisionsProvider),
-              ),
+              compact
+                  ? IconButton(
+                      tooltip: 'Refresh',
+                      icon: const Icon(Icons.refresh_rounded),
+                      onPressed: () => ref.invalidate(myDecisionsProvider),
+                    )
+                  : GhostButton(
+                      label: 'Refresh',
+                      icon: Icons.refresh_rounded,
+                      onPressed: () => ref.invalidate(myDecisionsProvider),
+                    ),
             ],
           ),
           const SizedBox(height: 20),
@@ -69,44 +77,35 @@ class MyDecisionsScreen extends ConsumerWidget {
           // counted off the visible page, so filtering or paging cannot make
           // the headline numbers drift.
           async.when(
-            loading: () => const Row(children: [
-              Expanded(child: ShimmerCard(height: 86)),
-              SizedBox(width: 12),
-              Expanded(child: ShimmerCard(height: 86)),
-              SizedBox(width: 12),
-              Expanded(child: ShimmerCard(height: 86)),
-            ]),
+            loading: () => _tallyGrid(
+                compact, List.generate(4, (_) => const ShimmerCard(height: 66))),
             error: (_, __) => const SizedBox.shrink(),
-            data: (page) => Row(
-              children: [
-                Expanded(
-                  child: _Tally(
-                    label: 'Decisions made',
-                    value: page.approved + page.rejected,
-                    color: context.c.info,
-                    icon: Icons.gavel_rounded,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _Tally(
-                    label: 'Approved by me',
-                    value: page.approved,
-                    color: context.c.ok,
-                    icon: Icons.check_circle_outline_rounded,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _Tally(
-                    label: 'Rejected by me',
-                    value: page.rejected,
-                    color: context.c.bad,
-                    icon: Icons.cancel_outlined,
-                  ),
-                ),
-              ],
-            ),
+            data: (page) => _tallyGrid(compact, [
+              _Tally(
+                label: 'Decisions made',
+                value: page.decided,
+                color: context.c.info,
+                icon: Icons.gavel_rounded,
+              ),
+              _Tally(
+                label: 'Approved by me',
+                value: page.approved,
+                color: context.c.ok,
+                icon: Icons.check_circle_outline_rounded,
+              ),
+              _Tally(
+                label: 'Rejected by me',
+                value: page.rejected,
+                color: context.c.bad,
+                icon: Icons.cancel_outlined,
+              ),
+              _Tally(
+                label: 'Sent back by me',
+                value: page.reassigned,
+                color: context.c.warn,
+                icon: Icons.reply_rounded,
+              ),
+            ]),
           ),
           const SizedBox(height: 20),
 
@@ -167,15 +166,12 @@ class MyDecisionsScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-              error: (e, _) => Center(
-                child: Text('Could not load your decisions.\n$e',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: context.c.bad)),
-              ),
+              error: (e, _) => ErrorState(
+                  error: e, onRetry: () => ref.invalidate(myDecisionsProvider)),
               data: (page) => page.decisions.isEmpty
                   ? EmptyState(
                       message: active == null
-                          ? 'You have not approved or rejected any notes yet.'
+                          ? 'You have not decided on any notes yet.'
                           : 'Nothing here under this filter.',
                       icon: Icons.history_rounded,
                     )
@@ -190,6 +186,21 @@ class MyDecisionsScreen extends ConsumerWidget {
       ),
     );
   }
+
+  /// Four tallies: one row on a wide screen, two by two on a phone.
+  /// A fixed tile height, not an aspect ratio: a ratio made the tiles too
+  /// short for their content at some widths.
+  static Widget _tallyGrid(bool compact, List<Widget> tiles) => GridView(
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: compact ? 2 : 4,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          mainAxisExtent: 72,
+        ),
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        children: tiles,
+      );
 }
 
 class _Tally extends StatelessWidget {
@@ -254,28 +265,32 @@ class _DecisionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = decision.isApproved ? context.c.ok : context.c.bad;
+    final (color, icon, verb) = decision.isApproved
+        ? (context.c.ok, Icons.check_circle_rounded, 'You approved')
+        : decision.isReassigned
+            ? (context.c.warn, Icons.reply_rounded, 'You sent back')
+            : (context.c.bad, Icons.cancel_rounded, 'You rejected');
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: VistarCard(
         padding: const EdgeInsets.all(14),
-        onTap: () => context.go('/notes/${decision.noteId}'),
+        onTap: decision.noteOpenable
+            ? () => context.go('/notes/${decision.noteId}')
+            : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Icon(
-                  decision.isApproved
-                      ? Icons.check_circle_rounded
-                      : Icons.cancel_rounded,
+                  icon,
                   color: color,
                   size: 18,
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  decision.isApproved ? 'You approved' : 'You rejected',
+                  verb,
                   style: TextStyle(
                       color: color, fontSize: 13, fontWeight: FontWeight.w700),
                 ),
@@ -336,6 +351,9 @@ class _DecisionRow extends StatelessWidget {
                       style: TextStyle(color: context.c.txt3, fontSize: 11.5)),
                   StatusPill(decision.noteStatus),
                 ]),
+                if (!decision.noteOpenable)
+                  Text('With the creator for revision',
+                      style: TextStyle(color: context.c.txt3, fontSize: 11.5)),
               ],
             ),
           ],

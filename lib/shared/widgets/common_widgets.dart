@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/network/api_exception.dart';
 
 /// Section title with left ribbon accent bar
 class SectionHeader extends StatelessWidget {
@@ -20,16 +21,21 @@ class SectionHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 9),
-        Text(
-          title,
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-            color: context.c.txt,
-            letterSpacing: -0.2,
+        // Expanded, not Text + Spacer: a long title next to a trailing button
+        // ran off the right edge on a phone.
+        Expanded(
+          child: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: context.c.txt,
+              letterSpacing: -0.2,
+            ),
           ),
         ),
-        const Spacer(),
         if (trailing != null) trailing!,
       ],
     );
@@ -271,4 +277,96 @@ class EmptyState extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A list or page that failed to load: a plain-language reason and a way to
+/// try again, never the raw exception.
+class ErrorState extends StatelessWidget {
+  const ErrorState({super.key, required this.error, this.onRetry, this.compact = false});
+  final Object error;
+  final VoidCallback? onRetry;
+
+  /// For a failure inside a card, where the full-height version is too big.
+  final bool compact;
+
+  static String messageFor(Object error) {
+    if (error is ApiException) {
+      if (error.isNetwork) return 'Cannot reach the server. Check your connection and try again.';
+      if (error.isForbidden) return "You don't have access to this.";
+      if (error.statusCode == 404) return 'This could not be found. It may have been removed.';
+      if ((error.statusCode ?? 500) >= 500) return 'Something went wrong on the server. Please try again.';
+      return error.message;
+    }
+    return 'Something went wrong. Please try again.';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final retry = onRetry == null
+        ? null
+        : TextButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text('Try again'),
+          );
+    if (compact) {
+      return Row(
+        children: [
+          Icon(Icons.error_outline_rounded, size: 18, color: context.c.bad),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(messageFor(error), style: TextStyle(color: context.c.txt2, fontSize: 13.5)),
+          ),
+          if (retry != null) retry,
+        ],
+      );
+    }
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(48),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_off_rounded, size: 48, color: context.c.txt3),
+            const SizedBox(height: 16),
+            Text(
+              messageFor(error),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: context.c.txt2, fontSize: 15),
+            ),
+            if (retry != null) ...[const SizedBox(height: 12), retry],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Ask before an action that cannot be taken back. True only on an explicit
+/// confirm; dismissing the dialog is a "no".
+Future<bool> confirmAction(
+  BuildContext context, {
+  required String title,
+  required String message,
+  required String confirmLabel,
+  String cancelLabel = 'Cancel',
+  bool destructive = true,
+}) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      backgroundColor: context.c.surface,
+      title: Text(title, style: TextStyle(color: context.c.txt, fontSize: 17)),
+      content: Text(message, style: TextStyle(color: context.c.txt2, fontSize: 14)),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(cancelLabel)),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          style: destructive ? TextButton.styleFrom(foregroundColor: context.c.bad) : null,
+          child: Text(confirmLabel),
+        ),
+      ],
+    ),
+  );
+  return ok ?? false;
 }

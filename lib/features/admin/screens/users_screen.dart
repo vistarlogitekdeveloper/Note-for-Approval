@@ -9,13 +9,15 @@ import '../../../shared/widgets/common_widgets.dart';
 import '../../../shared/widgets/gradient_button.dart';
 import '../data/admin_repository.dart';
 
-final usersAdminProvider = FutureProvider<List<User>>((ref) async {
+// autoDispose: an app-lifetime cache showed the previous admin's users
+// (even another organisation's) after a sign-out and sign-in.
+final usersAdminProvider = FutureProvider.autoDispose<List<User>>((ref) async {
   return ref.read(adminRepositoryProvider).getUsers();
 });
 
 /// The levels an approver can be assigned to. Needed by the user dialog, which
 /// must send a `hierarchy_level` whenever the role is `approver`.
-final hierarchyLevelsProvider = FutureProvider<List<HierarchyLevel>>((ref) async {
+final hierarchyLevelsProvider = FutureProvider.autoDispose<List<HierarchyLevel>>((ref) async {
   return ref.read(adminRepositoryProvider).getHierarchy();
 });
 
@@ -27,13 +29,13 @@ class UsersAdminScreen extends ConsumerWidget {
     final usersAsync = ref.watch(usersAdminProvider);
 
     return Padding(
-      padding: const EdgeInsets.all(28),
+      padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 600 ? 16 : 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Column(
+              Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Users',
@@ -46,8 +48,8 @@ class UsersAdminScreen extends ConsumerWidget {
                   Text('Manage user accounts and role assignments',
                       style: TextStyle(color: context.c.txt3, fontSize: 14)),
                 ],
-              ),
-              const Spacer(),
+              )),
+              const SizedBox(width: 12),
               GradientButton(
                 label: 'Add User',
                 icon: Icons.person_add_outlined,
@@ -66,10 +68,7 @@ class UsersAdminScreen extends ConsumerWidget {
                       child: ShimmerCard(height: 60),
                     )),
               ),
-              error: (e, _) => Center(
-                child: Text('Error: $e',
-                    style: TextStyle(color: context.c.bad)),
-              ),
+              error: (e, _) => ErrorState(error: e, onRetry: () => ref.invalidate(usersAdminProvider)),
             ),
           ),
         ],
@@ -291,6 +290,19 @@ class _UsersTable extends ConsumerWidget {
   /// second-guessing it here.
   Future<void> _toggleActive(
       BuildContext context, WidgetRef ref, User u) async {
+    // Deactivating signs the person out at once and they can no longer act
+    // on notes waiting for them — confirm it. Reactivating needs no ceremony.
+    if (u.isActive &&
+        !await confirmAction(
+          context,
+          title: 'Deactivate ${u.name}?',
+          message: '${u.name} will be signed out and will not be able to sign in '
+              'or act on notes until reactivated.',
+          confirmLabel: 'Deactivate',
+        )) {
+      return;
+    }
+    if (!context.mounted) return;
     try {
       await ref
           .read(adminRepositoryProvider)
